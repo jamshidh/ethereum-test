@@ -149,18 +149,6 @@ instance FromJSON Test where
   parseJSON x = error $ "Missing case in parseJSON for Test: " ++ show x
 
 
-{-
-str2Int::Value->Parser Integer
-str2Int (String s) =
-  Parser {} -- read $ T.unpack s
-
-qqqq :: Object -> Text -> Parser Integer
-qqqq obj key = (
-  case H.lookup key obj of
-    Nothing -> fail $ "key " ++ show key ++ " not present"
-    Just v  -> (str2Int v))::Parser Integer
-  -}
-
 --Same as an Integer, but can be pulled from json files as either a json number or string (like "2")
 newtype SloppyInteger = SloppyInteger Integer
 
