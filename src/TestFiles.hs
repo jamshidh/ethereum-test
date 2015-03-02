@@ -1,6 +1,7 @@
 
 module TestFiles where
 
+testFiles::[String]
 testFiles =
   [
 --    "tests/BlockchainTests/basicBlockChain.json",
