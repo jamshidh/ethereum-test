@@ -87,7 +87,7 @@ data CallCreate =
     ccDestination::String,
     ccGasLimit::String,
     ccValue::String
-    } deriving (Show)
+    } deriving (Show, Eq)
 
 {-
 data Log =

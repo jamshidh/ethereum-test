@@ -48,8 +48,8 @@ import TestDescriptions
 import TestFiles
 
 debug::Bool
---debug = True
-debug = False
+debug = True
+--debug = False
 
 
 
@@ -119,6 +119,20 @@ getNumber::String->Integer
 getNumber "" = 0
 getNumber x = read x
 
+newAccountsToCallCreates::(Maybe Address, Integer, AddressState)->ContextM CallCreate
+newAccountsToCallCreates (maybeAddress, gasRemaining, AddressState{balance=b, codeHash=h}) = do
+  Just codeBytes <- getCode h
+  let destination =
+        case maybeAddress of
+          Just (Address address) -> padZeros 40 $ showHex address ""
+          Nothing -> ""
+  return CallCreate {
+    ccData="0x" ++ BC.unpack (B16.encode codeBytes),
+    ccDestination=destination,
+    ccGasLimit=show gasRemaining,
+    ccValue=show b
+    }
+
 runTest::Test->ContextM (Either String String)
 runTest test = do
   setStateRoot emptyTriePtr
@@ -173,7 +187,24 @@ runTest test = do
     case theInput test of
       IExec exec ->
 
-        runCodeFromStart 0 (getNumber $ gas exec)
+        --runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM VMState -- (B.ByteString, Integer, Maybe VMException)
+        runCodeForTransaction' block 0 (caller exec) (origin exec)
+        (getNumber . value' $ exec) (getNumber . gasPrice' $ exec) (getNumber $ gas exec)
+        (address' exec) (code exec) (theData . data' $ exec)
+
+{-      runCodeFromStart callDepth' availableGas
+          Environment{
+            envGasPrice=gasPrice',
+            envBlock=b,
+            envOwner = owner,
+            envOrigin = origin,
+            envInputData = theData,
+            envSender = sender,
+            envValue = value',
+            envCode = code
+            }
+  -}        
+{-        runCodeFromStart 0 (getNumber $ gas exec)
           Environment{
             envGasPrice=getNumber . gasPrice' $ exec,
             envBlock=block,
@@ -183,7 +214,7 @@ runTest test = do
             envSender = caller exec,
             envValue = getNumber . value' $ exec,
             envCode = code exec
-            }
+            }-}
 
       ITransaction transaction -> do
         let ut =
@@ -251,22 +282,32 @@ runTest test = do
           Nothing -> True
           Just x -> remainingGas' == read x,
         [] == logs test) of-}
+
+
+  returnedCallCreates <- forM (newAccounts newVMState) newAccountsToCallCreates
   case (True,
         (M.fromList allAddressStates3 == post test) || (M.null (post test) && isJust (vmException newVMState)),
         case remainingGas test of
           Nothing -> True
           Just x -> vmGasRemaining newVMState == read x,
-        logs newVMState == reverse (logs' test)) of
-    (False, _, _, _) -> return $ Left "result doesn't match"
-    (_, False, _, _) -> return $ Left "address states don't match"
-    (_, _, False, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test)
-    (_, _, _, False) -> do
+        logs newVMState == reverse (logs' test),
+        fromMaybe [] (callcreates test) == returnedCallCreates) of
+    (False, _, _, _, _) -> return $ Left "result doesn't match"
+    (_, False, _, _, _) -> return $ Left "address states don't match"
+    (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test)
+    (_, _, _, False, _) -> do
       liftIO $ putStrLn "llllllllllllllllllllll"
       liftIO $ putStrLn $ show $ logs newVMState
       liftIO $ putStrLn "llllllllllllllllllllll"
       liftIO $ putStrLn $ show $ logs' test
       liftIO $ putStrLn "llllllllllllllllllllll"
       return $ Left "logs don't match"
+    (_, _, _, _, False) -> do
+      liftIO $ do
+        putStrLn $ "callcreates test = " ++ show (callcreates test)
+        putStrLn $ "returnedCallCreates = " ++ show (returnedCallCreates)
+      
+      return $ Left $ "callcreates don't match"
     _ -> return $ Right "Success"
 
 formatResult::(String, Either String String)->String
@@ -277,7 +318,7 @@ runTests::[(String, Test)]->ContextM ()
 runTests tests = do
   results <- 
     forM tests $ \(name, test) -> do
-      --qqqqliftIO $ putStrLn $ "Running test: " ++ show name
+      --liftIO $ putStrLn $ "Running test: " ++ show name
       result <- runTest test
       return (name, result)
   liftIO $ putStrLn $ intercalate "\n" $ formatResult <$> results
