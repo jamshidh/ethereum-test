@@ -291,7 +291,7 @@ runTest test = do
           Nothing -> True
           Just x -> vmGasRemaining newVMState == read x,
         logs newVMState == reverse (logs' test),
-        fromMaybe [] (callcreates test) == returnedCallCreates) of
+        fromMaybe [] (callcreates test) == reverse returnedCallCreates) of
     (False, _, _, _, _) -> return $ Left "result doesn't match"
     (_, False, _, _, _) -> return $ Left "address states don't match"
     (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test)
