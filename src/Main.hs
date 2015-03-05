@@ -3,6 +3,7 @@
 import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
 import Data.Aeson
@@ -26,14 +27,17 @@ import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.Data.Block
+import Blockchain.Data.Code
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
+import Blockchain.DBM
 import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.SHA
+import Blockchain.SigningTools
 import Blockchain.Util
 import Blockchain.VM
 import Blockchain.VM.Code
@@ -48,8 +52,8 @@ import TestDescriptions
 import TestFiles
 
 debug::Bool
-debug = True
---debug = False
+--debug = True
+debug = False
 
 
 
@@ -69,17 +73,17 @@ hexString2Word256 x = error $ "hexString2Word256 called with input of wrong form
 
 populateAndConvertAddressState::AddressState'->ContextM AddressState
 populateAndConvertAddressState addressState' = do
-  addCode . codeBytes . contractCode' $ addressState'
+  lift . addCode . codeBytes . contractCode' $ addressState'
 
-  oldStorageStateRoot <- getStorageStateRoot
-  setStorageStateRoot emptyTriePtr
+  oldStorageStateRoot <- lift $ getStorageStateRoot
+  lift $ setStorageStateRoot emptyTriePtr
 
   forM_ (M.toList $ storage' addressState') $ \(key, val) -> do
-    putStorageKeyVal (hexString2Word256 key) (hexString2Word256 val)
+    lift $ putStorageKeyVal (hexString2Word256 key) (hexString2Word256 val)
 
-  storageStateRoot <- getStorageStateRoot
+  storageStateRoot <- lift $ getStorageStateRoot
 
-  setStorageStateRoot oldStorageStateRoot
+  lift $ setStorageStateRoot oldStorageStateRoot
 
   return $
     AddressState
@@ -99,18 +103,18 @@ showHexInt x = "0x" ++ showHex x ""
 
 getDataAndRevertAddressState::AddressState->ContextM AddressState'
 getDataAndRevertAddressState addressState = do
-  theCode <- fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
+  theCode <- lift $ fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
              getCode (codeHash addressState)
-  sr <- getStorageStateRoot
-  setStorageStateRoot (contractRoot addressState)
-  storage <- getStorageKeyVals ""
-  setStorageStateRoot sr
+  sr <- lift $ getStorageStateRoot
+  lift $ setStorageStateRoot (contractRoot addressState)
+  storage <- lift $ getStorageKeyVals ""
+  lift $ setStorageStateRoot sr
   return $
     AddressState'
     (addressStateNonce addressState)
     (balance addressState)
     (M.fromList (map (\(key, val) -> (showHexInt $ byteString2Integer $ nibbleString2ByteString key, showHexInt $ rlpDecode $ rlpDeserialize $ rlpDecode val)) storage))
-    (bytes2Code theCode)
+    (Code theCode)
 
 formatAddressState::AddressState'->String
 formatAddressState = show
@@ -121,7 +125,7 @@ getNumber x = read x
 
 newAccountsToCallCreates::(Maybe Address, Integer, AddressState)->ContextM CallCreate
 newAccountsToCallCreates (maybeAddress, gasRemaining, AddressState{balance=b, codeHash=h}) = do
-  Just codeBytes <- getCode h
+  Just codeBytes <- lift $ getCode h
   let destination =
         case maybeAddress of
           Just (Address address) -> padZeros 40 $ showHex address ""
@@ -135,18 +139,18 @@ newAccountsToCallCreates (maybeAddress, gasRemaining, AddressState{balance=b, co
 
 runTest::Test->ContextM (Either String String)
 runTest test = do
-  setStateRoot emptyTriePtr
-  setStorageStateRoot emptyTriePtr
+  lift $ setStateRoot emptyTriePtr
+  lift $ setStorageStateRoot emptyTriePtr
 
   --liftIO . putStrLn . show . hash . codeBytes . code . exec $ test
 
   forM_ (M.toList $ pre test) $ \(address, addressState') -> do
     addressState <- populateAndConvertAddressState addressState'
     --liftIO $ putStrLn $ show addressState
-    putAddressState (Address . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ address) addressState
+    lift $ putAddressState (Address . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ address) addressState
 
 
-  allAddressStates <- getAllAddressStates
+  allAddressStates <- lift getAllAddressStates
   allAddressStates' <-
       forM allAddressStates $ \(k, a') -> do
         --liftIO $ putStrLn $ "-------\n" ++ show k ++ show a'
@@ -225,7 +229,7 @@ runTest test = do
                     gasPrice = getNumber $ tGasPrice' transaction,
                     tGasLimit = getNumber $ tGasLimit' transaction,
                     value = getNumber $ tValue' transaction,
-                    tInit = bytes2Code $ theData $ tData' transaction
+                    tInit = Code $ theData $ tData' transaction
                     }
                 Just a ->
                   MessageTX {
@@ -256,7 +260,7 @@ runTest test = do
   liftIO $ print (post test)
 -}
 
-  allAddressStates2 <- getAllAddressStates
+  allAddressStates2 <- lift getAllAddressStates
   allAddressStates3 <-
       forM allAddressStates2 $ \(k, a') -> do
         when debug $ liftIO $ putStrLn $ "-------\n" ++ show (pretty k) ++ format a'
@@ -342,7 +346,7 @@ main = do
 
   _ <- runResourceT $ do
     cxt <- openDBs "h"
-    liftIO $ runStateT (runAllTests maybeFileName maybeTestName) cxt
+    liftIO $ runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [])) cxt
 
   return ()
 

@@ -11,6 +11,7 @@ executable ethereum-test
   build-depends:       base >=4.7 && <4.8
                      , nibblestring
                      , ethereum-client-haskell
+                     , ethereum-data-leveldb
                      , ethereum-merkle-patricia-db
                      , ethereum-rlp
                      , haskoin
@@ -21,6 +22,7 @@ executable ethereum-test
                      , bytestring
                      , base16-bytestring
                      , unordered-containers
+                     , mtl
                      , containers
                      , scientific
                      , text

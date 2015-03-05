@@ -27,6 +27,7 @@ import GHC.Generics hiding (to)
 import qualified Network.Haskoin.Internals as Haskoin
 
 import Blockchain.Data.Address
+import Blockchain.Data.Code
 import Blockchain.Data.Log
 import Blockchain.Database.MerklePatricia
 import Blockchain.SHA
@@ -271,7 +272,7 @@ instance FromJSON Code where
     pure . string2Code . T.unpack
     where
       string2Code::String->Code
-      string2Code ('0':'x':rest) = bytes2Code . fst . B16.decode . BC.pack $ rest
+      string2Code ('0':'x':rest) = Code . fst . B16.decode . BC.pack $ rest
       string2Code x = error $ "string2Code called with input of wrong format: " ++ x
 
 instance FromJSON Haskoin.PrvKey where
