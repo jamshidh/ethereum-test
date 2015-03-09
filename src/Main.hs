@@ -189,12 +189,16 @@ runTest test = do
 
   newVMState <-
     case theInput test of
-      IExec exec ->
+      IExec exec -> do
 
-        --runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM VMState -- (B.ByteString, Integer, Maybe VMException)
-        runCodeForTransaction' block 0 (caller exec) (origin exec)
-        (getNumber . value' $ exec) (getNumber . gasPrice' $ exec) (getNumber $ gas exec)
-        (address' exec) (code exec) (theData . data' $ exec)
+          --runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM VMState -- (B.ByteString, Integer, Maybe VMException)
+          newVMStateOrException <- runCodeForTransaction' block 0 (caller exec) (origin exec)
+                                 (getNumber . value' $ exec) (getNumber . gasPrice' $ exec) (getNumber $ gas exec)
+                                                                 (address' exec) (code exec) (theData . data' $ exec)
+
+          case newVMStateOrException of
+            Left e -> return $ (eState e){vmException=Just e}
+            Right state -> return state
 
 {-      runCodeFromStart callDepth' availableGas
           Environment{
