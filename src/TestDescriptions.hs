@@ -6,7 +6,7 @@ module TestDescriptions (
   AddressState'(..),
   Exec(..),
   Transaction'(..),
-  CallCreate(..),
+--  CallCreate(..),
   RawData(..),
   InputWrapper(..),
   Test(..),
@@ -32,7 +32,7 @@ import Blockchain.Data.Log
 import Blockchain.Database.MerklePatricia
 import Blockchain.SHA
 import Blockchain.Util
-import Blockchain.VM.Code
+import Blockchain.VM.VMState
 
 --import Debug.Trace
 
@@ -82,6 +82,7 @@ data Transaction' =
 
 data InputWrapper = IExec Exec | ITransaction Transaction' deriving (Show)
 
+{-
 data CallCreate =
   CallCreate {
     ccData::String,
@@ -89,6 +90,7 @@ data CallCreate =
     ccGasLimit::String,
     ccValue::String
     } deriving (Show, Eq)
+-}
 
 {-
 data Log =
@@ -102,7 +104,7 @@ data Log =
 
 data Test =
   Test {
-    callcreates::Maybe [CallCreate],
+    callcreates::Maybe [DebugCallCreate],
     env::Env,
     theInput::InputWrapper,
     {-
@@ -232,13 +234,15 @@ instance FromJSON AddressState' where
       addressState' w x y z = AddressState' (read w) (read x) y z
   parseJSON x = error $ "Wrong format when trying to parse AddressState' from JSON: " ++ show x
 
-instance FromJSON CallCreate where
+instance FromJSON DebugCallCreate where
   parseJSON (Object v) =
-    CallCreate <$>
+    debugCallCreate' <$>
     v .: "data" <*>
     v .: "destination" <*>
     v .: "gasLimit" <*>
     v .: "value"
+    where
+      debugCallCreate' v1 v2 gasLimit val = DebugCallCreate v1 v2 (read gasLimit) (read val)
   parseJSON x = error $ "Wrong format when trying to parse CallCreate from JSON: " ++ show x
 
 instance FromJSON Log where

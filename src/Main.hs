@@ -52,8 +52,8 @@ import TestDescriptions
 import TestFiles
 
 debug::Bool
---debug = True
-debug = False
+debug = True
+--debug = False
 
 
 
@@ -123,19 +123,21 @@ getNumber::String->Integer
 getNumber "" = 0
 getNumber x = read x
 
-newAccountsToCallCreates::(Maybe Address, Integer, AddressState)->ContextM CallCreate
+{-
+newAccountsToCallCreates::(Maybe Address, Integer, AddressState)->ContextM DebugCallCreate
 newAccountsToCallCreates (maybeAddress, gasRemaining, AddressState{balance=b, codeHash=h}) = do
   Just codeBytes <- lift $ getCode h
   let destination =
         case maybeAddress of
           Just (Address address) -> padZeros 40 $ showHex address ""
           Nothing -> ""
-  return CallCreate {
+  return DebugCallCreate {
     ccData="0x" ++ BC.unpack (B16.encode codeBytes),
     ccDestination=destination,
     ccGasLimit=show gasRemaining,
     ccValue=show b
     }
+-}
 
 runTest::Test->ContextM (Either String String)
 runTest test = do
@@ -192,7 +194,7 @@ runTest test = do
       IExec exec -> do
 
           --runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM VMState -- (B.ByteString, Integer, Maybe VMException)
-          newVMStateOrException <- runCodeForTransaction' block 0 (caller exec) (origin exec)
+          newVMStateOrException <- runCodeForTransaction' True block 0 (caller exec) (origin exec)
                                  (getNumber . value' $ exec) (getNumber . gasPrice' $ exec) (getNumber $ gas exec)
                                                                  (address' exec) (code exec) (theData . data' $ exec)
 
@@ -292,14 +294,14 @@ runTest test = do
         [] == logs test) of-}
 
 
-  returnedCallCreates <- forM (newAccounts newVMState) newAccountsToCallCreates
   case (True,
         (M.fromList allAddressStates3 == post test) || (M.null (post test) && isJust (vmException newVMState)),
         case remainingGas test of
           Nothing -> True
           Just x -> vmGasRemaining newVMState == read x,
         logs newVMState == reverse (logs' test),
-        fromMaybe [] (callcreates test) == reverse returnedCallCreates) of
+        (callcreates test == fmap reverse (debugCallCreates newVMState)) || (isNothing (callcreates test) && (debugCallCreates newVMState == Just []))
+        ) of
     (False, _, _, _, _) -> return $ Left "result doesn't match"
     (_, False, _, _, _) -> return $ Left "address states don't match"
     (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test)
@@ -313,7 +315,7 @@ runTest test = do
     (_, _, _, _, False) -> do
       liftIO $ do
         putStrLn $ "callcreates test = " ++ show (callcreates test)
-        putStrLn $ "returnedCallCreates = " ++ show (returnedCallCreates)
+        putStrLn $ "returnedCallCreates = " ++ show (debugCallCreates newVMState)
       
       return $ Left $ "callcreates don't match"
     _ -> return $ Right "Success"
