@@ -111,7 +111,7 @@ data Test =
     exec::Maybe Exec,
     transaction::Maybe Transaction,
     -}
-    remainingGas::Maybe String,
+    remainingGas::Maybe Integer,
     logs'::[Log],
     out::RawData,
     pre::M.Map String AddressState',
@@ -134,7 +134,7 @@ instance FromJSON Test where
     v .: "pre" <*>
     v .:? "post" .!= M.empty
     where
-       test v1 v2 exec v4 v5 v6 v7 v8 = Test v1 v2 (IExec exec) v4 v5 v6 v7 v8
+       test v1 v2 exec gas v5 v6 v7 v8 = Test v1 v2 (IExec exec) (fmap read gas) v5 v6 v7 v8
   parseJSON (Object v) | H.member "transaction" v =
     test <$>
     v .:? "callcreates" <*>
@@ -148,7 +148,7 @@ instance FromJSON Test where
     v .: "pre" <*>
     v .:? "post" .!= M.empty
     where
-       test v1 v2 transaction v4 v5 v6 v7 v8 = Test v1 v2 (ITransaction transaction) v4 v5 v6 v7 v8
+       test v1 v2 transaction gas v5 v6 v7 v8 = Test v1 v2 (ITransaction transaction) (fmap read gas) v5 v6 v7 v8
   parseJSON x = error $ "Missing case in parseJSON for Test: " ++ show x
 
 

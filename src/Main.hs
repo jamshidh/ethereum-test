@@ -298,13 +298,13 @@ runTest test = do
         (M.fromList allAddressStates3 == post test) || (M.null (post test) && isJust (vmException newVMState)),
         case remainingGas test of
           Nothing -> True
-          Just x -> vmGasRemaining newVMState == read x,
+          Just x -> vmGasRemaining newVMState == x,
         logs newVMState == reverse (logs' test),
         (callcreates test == fmap reverse (debugCallCreates newVMState)) || (isNothing (callcreates test) && (debugCallCreates newVMState == Just []))
         ) of
     (False, _, _, _, _) -> return $ Left "result doesn't match"
     (_, False, _, _, _) -> return $ Left "address states don't match"
-    (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test)
+    (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test) ++ ", diff=" ++ show (vmGasRemaining newVMState - fromJust (remainingGas test))
     (_, _, _, False, _) -> do
       liftIO $ putStrLn "llllllllllllllllllllll"
       liftIO $ putStrLn $ show $ logs newVMState
