@@ -256,10 +256,17 @@ instance FromJSON Log where
       log' v1 v2 v3 v4 = Log v1 (fromIntegral $ byteString2Integer $ fst $ B16.decode v2) v3 v4
   parseJSON x = error $ "Wrong format when trying to parse Log from JSON: " ++ show x
 
+b16_decode_optional0x::B.ByteString->(B.ByteString, B.ByteString)
+b16_decode_optional0x x = 
+  case BC.unpack x of
+    ('0':'x':rest) -> B16.decode $ BC.pack rest
+    _ -> B16.decode x
+
+
 instance FromJSON Address where
   parseJSON =
     withText "Address" $
-    pure . Address . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack . T.unpack
+    pure . Address . fromIntegral . byteString2Integer . fst . b16_decode_optional0x . BC.pack . T.unpack
 
 instance FromJSON B.ByteString where
   parseJSON =
