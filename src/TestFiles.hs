@@ -190,9 +190,7 @@ testFiles =
     "./tests/VMTests/vmLogTest.json",
     "./tests/VMTests/vmArithmeticTest.json",
     "./tests/VMTests/vmBitwiseLogicOperationTest.json",
-    "./tests/VMTests/vmIOandFlowOperationsTest.json"
-
-{-
+    "./tests/VMTests/vmIOandFlowOperationsTest.json",
 
     "./tests/StateTests/stTransactionTest.json",
     "./tests/StateTests/stInitCodeTest.json",
@@ -209,7 +207,6 @@ testFiles =
     "./tests/StateTests/stMemoryTest.json"
     --"./tests/StateTests/stQuadraticComplexityTest.json"
 
--}
 
   ]
 
