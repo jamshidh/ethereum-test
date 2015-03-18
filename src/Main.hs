@@ -4,6 +4,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans
+import Control.Monad.Trans.Either
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
 import Data.Aeson
@@ -11,6 +12,7 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
+import Data.Either
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
@@ -163,7 +165,7 @@ runTest test = do
   when debug $ do
     liftIO $ putStrLn $ show (pre test)
     liftIO $ putStrLn "allAddressStates'-------------"
-    liftIO $ putStrLn $ show $ M.fromList allAddressStates'
+    --liftIO $ putStrLn $ show $ M.fromList allAddressStates'
 
   let block =
         Block {
@@ -189,42 +191,29 @@ runTest test = do
           }
 
 
-  newVMState <-
+  (result, newVMState) <-
     case theInput test of
       IExec exec -> do
 
           --runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM VMState -- (B.ByteString, Integer, Maybe VMException)
-          newVMStateOrException <- runCodeForTransaction' True block 0 (caller exec) (origin exec)
-                                 (getNumber . value' $ exec) (getNumber . gasPrice' $ exec) (getNumber $ gas exec)
-                                                                 (address' exec) (code exec) (theData . data' $ exec)
 
-          case newVMStateOrException of
-            Left e -> return $ (eState e){vmException=Just e}
-            Right state -> return state
+        let env =
+              Environment{
+                envGasPrice=getNumber $ gasPrice' exec,
+                envBlock=block,
+                envOwner = address' exec,
+                envOrigin = origin exec,
+                envInputData = theData $ data' exec,
+                envSender = caller exec,
+                envValue = getNumber $ value' exec,
+                envCode = code exec,
+                envJumpDests = getValidJUMPDESTs $ code exec
+                }
 
-{-      runCodeFromStart callDepth' availableGas
-          Environment{
-            envGasPrice=gasPrice',
-            envBlock=b,
-            envOwner = owner,
-            envOrigin = origin,
-            envInputData = theData,
-            envSender = sender,
-            envValue = value',
-            envCode = code
-            }
-  -}        
-{-        runCodeFromStart 0 (getNumber $ gas exec)
-          Environment{
-            envGasPrice=getNumber . gasPrice' $ exec,
-            envBlock=block,
-            envOwner = address' exec,
-            envOrigin = origin exec,
-            envInputData = theData . data' $ exec,
-            envSender = caller exec,
-            envValue = getNumber . value' $ exec,
-            envCode = code exec
-            }-}
+        vmState <- liftIO $ startingState env
+
+        flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $ runEitherT $
+          runCodeFromStart 0
 
       ITransaction transaction -> do
         let ut =
@@ -252,8 +241,9 @@ runTest test = do
           signTransaction
           (tSecretKey' transaction)
           ut
-        fmap fst $ addTransaction block (currentGasLimit $ env test) signedTransaction
+        (vmState, _) <- addTransaction block (currentGasLimit $ env test) signedTransaction
 
+        return (Right (), vmState)
 
 
 
@@ -276,6 +266,8 @@ runTest test = do
 
   when debug $ do
     liftIO $ putStrLn $ show (pre test)
+    liftIO $ putStrLn "Before-------------"
+    liftIO $ putStrLn $ intercalate "\n" $ (\(key, val) -> C.yellow key ++ ": " ++ formatAddressState val) <$> allAddressStates'
     liftIO $ putStrLn "allAddressStates'-------------"
     liftIO $ putStrLn $ intercalate "\n" $ (\(key, val) -> C.yellow key ++ ": " ++ formatAddressState val) <$> allAddressStates3
     liftIO $ putStrLn "post test-------------"
@@ -293,9 +285,8 @@ runTest test = do
           Just x -> remainingGas' == read x,
         [] == logs test) of-}
 
-
   case (True,
-        (M.fromList allAddressStates3 == post test) || (M.null (post test) && isJust (vmException newVMState)),
+        (M.fromList allAddressStates3 == post test) || (M.null (post test) && isLeft result),
         case remainingGas test of
           Nothing -> True
           Just x -> vmGasRemaining newVMState == x,
@@ -352,7 +343,7 @@ main = do
 
   _ <- runResourceT $ do
     cxt <- openDBs "h"
-    liftIO $ runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [])) cxt
+    liftIO $ runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] debug)) cxt
 
   return ()
 
