@@ -141,6 +141,18 @@ newAccountsToCallCreates (maybeAddress, gasRemaining, AddressState{balance=b, co
     }
 -}
 
+isBlankCode::Code->Bool
+isBlankCode (Code "") = True
+isBlankCode _ = False
+
+
+showInfo::(String,AddressState')->String
+showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=Code c}) = 
+    C.yellow key ++ "(" ++ show n ++ "): " ++ show b ++ 
+         (if M.null s then "" else ", " ++ show (M.toList s)) ++ 
+         (if B.null c then "" else ", CODE:[" ++ C.blue (format c) ++ "]")
+
+
 runTest::Test->ContextM (Either String String)
 runTest test = do
   lift $ setStateRoot emptyTriePtr
@@ -161,11 +173,12 @@ runTest test = do
         a <- getDataAndRevertAddressState a'
         return (BC.unpack $ B16.encode $ nibbleString2ByteString k, a)
 
-
+{-
   when debug $ do
     liftIO $ putStrLn $ show (pre test)
     liftIO $ putStrLn "allAddressStates'-------------"
     --liftIO $ putStrLn $ show $ M.fromList allAddressStates'
+-}
 
   let block =
         Block {
@@ -259,19 +272,18 @@ runTest test = do
   allAddressStates2 <- lift getAllAddressStates
   allAddressStates3 <-
       forM allAddressStates2 $ \(k, a') -> do
-        when debug $ liftIO $ putStrLn $ "-------\n" ++ show (pretty k) ++ format a'
+        --when debug $ liftIO $ putStrLn $ "-------\n" ++ show (pretty k) ++ format a'
         a <- getDataAndRevertAddressState a'
         return (BC.unpack $ B16.encode $ nibbleString2ByteString k, a)
 
 
   when debug $ do
-    liftIO $ putStrLn $ show (pre test)
     liftIO $ putStrLn "Before-------------"
-    liftIO $ putStrLn $ intercalate "\n" $ (\(key, val) -> C.yellow key ++ ": " ++ formatAddressState val) <$> allAddressStates'
+    liftIO $ putStrLn $ unlines $ showInfo <$> allAddressStates'
     liftIO $ putStrLn "allAddressStates'-------------"
-    liftIO $ putStrLn $ intercalate "\n" $ (\(key, val) -> C.yellow key ++ ": " ++ formatAddressState val) <$> allAddressStates3
+    liftIO $ putStrLn $ unlines $ showInfo <$> allAddressStates3
     liftIO $ putStrLn "post test-------------"
-    liftIO $ putStrLn $ intercalate "\n" $ (\(key, val) -> C.yellow key ++ ": " ++ formatAddressState val) <$> (M.toList $ post test)
+    liftIO $ putStrLn $ unlines $ showInfo <$> (M.toList $ post test)
     liftIO $ putStrLn "-------------"
     liftIO $ putStrLn $ "result Log: " ++ show (logs newVMState)
     liftIO $ putStrLn "-------------"
