@@ -264,14 +264,7 @@ runTest test = do
     liftIO $ putStrLn $ "expected Log: " ++ show (logs' test)
     liftIO $ putStrLn "-------------"
 
-{-  case (RawData result == out test,
-        (M.fromList allAddressStates3 == post test) || (M.null (post test) && isJust maybeException),
-        case remainingGas test of
-          Nothing -> True
-          Just x -> remainingGas' == read x,
-        [] == logs test) of-}
-
-  case (True,
+  case (RawData (fromMaybe B.empty $ returnVal newVMState) == out test,
         (M.fromList allAddressStates3 == post test) || (M.null (post test) && isLeft result),
         case remainingGas test of
           Nothing -> True
