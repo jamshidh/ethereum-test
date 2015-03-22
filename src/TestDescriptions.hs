@@ -114,11 +114,18 @@ data Test =
     remainingGas::Maybe Integer,
     logs'::[Log],
     out::RawData,
-    pre::M.Map String AddressState',
-    post::M.Map String AddressState'
+    pre::M.Map Address AddressState',
+    post::M.Map Address AddressState'
     } deriving (Generic, Show)
 
 type Tests = M.Map String Test
+
+convertAddressAndAddressInfo::M.Map String AddressState'->M.Map Address AddressState'
+convertAddressAndAddressInfo = M.fromList . map convertPre' . M.toList
+    where
+      convertPre'::(String, AddressState')->(Address, AddressState')
+      convertPre' (addressString, addressState) = (Address $ fromInteger $ byteString2Integer $ fst $ B16.decode $ BC.pack addressString, addressState)
+
 
 instance FromJSON Test where
   parseJSON (Object v) | H.member "exec" v =
@@ -134,7 +141,7 @@ instance FromJSON Test where
     v .: "pre" <*>
     v .:? "post" .!= M.empty
     where
-       test v1 v2 exec gas v5 v6 v7 v8 = Test v1 v2 (IExec exec) (fmap read gas) v5 v6 v7 v8
+       test v1 v2 exec gas v5 v6 v7 v8 = Test v1 v2 (IExec exec) (fmap read gas) v5 v6 (convertAddressAndAddressInfo v7) (convertAddressAndAddressInfo v8)
   parseJSON (Object v) | H.member "transaction" v =
     test <$>
     v .:? "callcreates" <*>
@@ -148,7 +155,7 @@ instance FromJSON Test where
     v .: "pre" <*>
     v .:? "post" .!= M.empty
     where
-       test v1 v2 transaction gas v5 v6 v7 v8 = Test v1 v2 (ITransaction transaction) (fmap read gas) v5 v6 v7 v8
+       test v1 v2 transaction gas v5 v6 v7 v8 = Test v1 v2 (ITransaction transaction) (fmap read gas) v5 v6 (convertAddressAndAddressInfo v7) (convertAddressAndAddressInfo v8)
   parseJSON x = error $ "Missing case in parseJSON for Test: " ++ show x
 
 

@@ -30,6 +30,7 @@ import Blockchain.Data.Address
 import Blockchain.Data.AddressState
 import Blockchain.Data.Block
 import Blockchain.Data.Code
+import Blockchain.Context
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
@@ -54,8 +55,8 @@ import TestDescriptions
 import TestFiles
 
 debug::Bool
-debug = True
---debug = False
+--debug = True
+debug = False
 
 
 
@@ -73,25 +74,21 @@ hexString2Word256 ('0':'x':rest) =
 hexString2Word256 x = error $ "hexString2Word256 called with input of wrong format: " ++ x
 
 
-populateAndConvertAddressState::AddressState'->ContextM AddressState
-populateAndConvertAddressState addressState' = do
+
+populateAndConvertAddressState::Address->AddressState'->ContextM AddressState
+populateAndConvertAddressState owner addressState' = do
   lift . addCode . codeBytes . contractCode' $ addressState'
 
-  oldStorageStateRoot <- lift $ getStorageStateRoot
-  lift $ setStorageStateRoot emptyTriePtr
-
   forM_ (M.toList $ storage' addressState') $ \(key, val) -> do
-    lift $ putStorageKeyVal (hexString2Word256 key) (hexString2Word256 val)
+    putStorageKeyVal' owner (hexString2Word256 key) (hexString2Word256 val)
 
-  storageStateRoot <- lift $ getStorageStateRoot
-
-  lift $ setStorageStateRoot oldStorageStateRoot
+  addressState <- lift $ getAddressState owner
 
   return $
     AddressState
       (nonce' addressState')
       (balance' addressState')
-      storageStateRoot 
+      (contractRoot addressState)
       (hash $ codeBytes $ contractCode' addressState')
 
 
@@ -103,19 +100,16 @@ showHexInt 0 = "0x"
 showHexInt x | odd $ length $ showHex x "" = "0x0" ++ showHex x ""
 showHexInt x = "0x" ++ showHex x ""
 
-getDataAndRevertAddressState::AddressState->ContextM AddressState'
-getDataAndRevertAddressState addressState = do
+getDataAndRevertAddressState::Address->AddressState->ContextM AddressState'
+getDataAndRevertAddressState owner addressState = do
   theCode <- lift $ fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
              getCode (codeHash addressState)
-  sr <- lift $ getStorageStateRoot
-  lift $ setStorageStateRoot (contractRoot addressState)
-  storage <- lift $ getStorageKeyVals ""
-  lift $ setStorageStateRoot sr
+  storage <- getAllStorageKeyVals' owner
   return $
     AddressState'
     (addressStateNonce addressState)
     (balance addressState)
-    (M.fromList (map (\(key, val) -> (showHexInt $ byteString2Integer $ nibbleString2ByteString key, showHexInt $ rlpDecode $ rlpDeserialize $ rlpDecode val)) storage))
+    (M.fromList (map (\(key, val) -> (showHexInt $ byteString2Integer $ nibbleString2ByteString key, showHexInt $ fromIntegral val)) storage))
     (Code theCode)
 
 formatAddressState::AddressState'->String
@@ -146,9 +140,9 @@ isBlankCode (Code "") = True
 isBlankCode _ = False
 
 
-showInfo::(String,AddressState')->String
+showInfo::(Address,AddressState')->String
 showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=Code c}) = 
-    C.yellow key ++ "(" ++ show n ++ "): " ++ show b ++ 
+    show (pretty key) ++ "(" ++ show n ++ "): " ++ show b ++ 
          (if M.null s then "" else ", " ++ show (M.toList s)) ++ 
          (if B.null c then "" else ", CODE:[" ++ C.blue (format c) ++ "]")
 
@@ -156,29 +150,17 @@ showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=
 runTest::Test->ContextM (Either String String)
 runTest test = do
   lift $ setStateRoot emptyTriePtr
-  lift $ setStorageStateRoot emptyTriePtr
-
-  --liftIO . putStrLn . show . hash . codeBytes . code . exec $ test
 
   forM_ (M.toList $ pre test) $ \(address, addressState') -> do
-    addressState <- populateAndConvertAddressState addressState'
-    --liftIO $ putStrLn $ show addressState
-    lift $ putAddressState (Address . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ address) addressState
+    addressState <- populateAndConvertAddressState address addressState'
+    lift $ putAddressState address addressState
 
 
   allAddressStates <- lift getAllAddressStates
   allAddressStates' <-
       forM allAddressStates $ \(k, a') -> do
-        --liftIO $ putStrLn $ "-------\n" ++ show k ++ show a'
-        a <- getDataAndRevertAddressState a'
-        return (BC.unpack $ B16.encode $ nibbleString2ByteString k, a)
-
-{-
-  when debug $ do
-    liftIO $ putStrLn $ show (pre test)
-    liftIO $ putStrLn "allAddressStates'-------------"
-    --liftIO $ putStrLn $ show $ M.fromList allAddressStates'
--}
+        a <- getDataAndRevertAddressState k a'
+        return (k, a)
 
   let block =
         Block {
@@ -207,8 +189,6 @@ runTest test = do
   (result, newVMState) <-
     case theInput test of
       IExec exec -> do
-
-          --runCodeForTransaction'::Block->Int->Address->Address->Integer->Integer->Integer->Address->Code->B.ByteString->ContextM VMState -- (B.ByteString, Integer, Maybe VMException)
 
         let env =
               Environment{
@@ -259,22 +239,11 @@ runTest test = do
         return (Right (), vmState)
 
 
-
-{-
-  liftIO $ print result
-  liftIO $ print (out test)
-  liftIO $ putStrLn $ "    STORAGE"
-  kvs <- getStorageKeyVals ""
-  liftIO $ putStrLn $ unlines (map (\(k, v) -> "0x" ++ showHexU (byteString2Integer $ nibbleString2ByteString k) ++ ": 0x" ++ showHexU (rlpDecode $ rlpDeserialize $ rlpDecode v::Integer)) kvs)
-  liftIO $ print (post test)
--}
-
   allAddressStates2 <- lift getAllAddressStates
   allAddressStates3 <-
       forM allAddressStates2 $ \(k, a') -> do
-        --when debug $ liftIO $ putStrLn $ "-------\n" ++ show (pretty k) ++ format a'
-        a <- getDataAndRevertAddressState a'
-        return (BC.unpack $ B16.encode $ nibbleString2ByteString k, a)
+        a <- getDataAndRevertAddressState k a'
+        return (k, a)
 
 
   when debug $ do
@@ -353,9 +322,10 @@ main = do
   
   --let theFileName = testFiles !! read fileNumber
 
+
   _ <- runResourceT $ do
     cxt <- openDBs "h"
-    liftIO $ runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] debug)) cxt
+    runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] debug)) cxt
 
   return ()
 
