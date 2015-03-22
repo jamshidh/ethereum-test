@@ -2,6 +2,7 @@
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.IfElse
 import Control.Monad.IO.Class
 import Control.Monad.Trans
 import Control.Monad.Trans.Either
@@ -53,12 +54,6 @@ import TestDescriptions
 --import Debug.Trace
 
 import TestFiles
-
-debug::Bool
---debug = True
-debug = False
-
-
 
 nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString str) = str
@@ -205,8 +200,19 @@ runTest test = do
 
         vmState <- liftIO $ startingState env
 
-        flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $ runEitherT $
-          runCodeFromStart 0
+        
+        flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
+          runEitherT $ do
+            runCodeFromStart 0
+
+            vmState <- lift get
+            whenM (lift $ lift isDebugEnabled) $ do
+              liftIO $ putStrLn $ "Removing accounts in suicideList: " ++
+                                intercalate ", " (show . pretty <$> suicideList vmState)
+
+            forM_ (suicideList vmState) $ lift . lift . lift . deleteAddressState
+
+      
 
       ITransaction transaction -> do
         let ut =
@@ -238,7 +244,6 @@ runTest test = do
 
         return (Right (), vmState)
 
-
   allAddressStates2 <- lift getAllAddressStates
   allAddressStates3 <-
       forM allAddressStates2 $ \(k, a') -> do
@@ -246,7 +251,7 @@ runTest test = do
         return (k, a)
 
 
-  when debug $ do
+  whenM isDebugEnabled $ do
     liftIO $ putStrLn "Before-------------"
     liftIO $ putStrLn $ unlines $ showInfo <$> allAddressStates'
     liftIO $ putStrLn "allAddressStates'-------------"
@@ -325,7 +330,7 @@ main = do
 
   _ <- runResourceT $ do
     cxt <- openDBs "h"
-    runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] debug)) cxt
+    runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] (length args == 2))) cxt
 
   return ()
 
