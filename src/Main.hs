@@ -152,7 +152,7 @@ runTest test = do
 
 
   allAddressStates <- lift getAllAddressStates
-  allAddressStates' <-
+  beforeAddressStates <-
       forM allAddressStates $ \(k, a') -> do
         a <- getDataAndRevertAddressState k a'
         return (k, a)
@@ -181,7 +181,7 @@ runTest test = do
           }
 
 
-  (result, newVMState) <-
+  (result, retVal, gasRemaining, logs, returnedCallCreates) <-
     case theInput test of
       IExec exec -> do
 
@@ -200,8 +200,8 @@ runTest test = do
 
         vmState <- liftIO $ startingState env
 
-        
-        flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
+        (result, vmState) <-
+          flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
           runEitherT $ do
             runCodeFromStart 0
 
@@ -212,7 +212,7 @@ runTest test = do
 
             forM_ (suicideList vmState) $ lift . lift . lift . deleteAddressState
 
-      
+        return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
 
       ITransaction transaction -> do
         let ut =
@@ -240,12 +240,16 @@ runTest test = do
           signTransaction
           (tSecretKey' transaction)
           ut
-        (vmState, _) <- addTransaction block (currentGasLimit $ env test) signedTransaction
+        result <-
+          runEitherT $ addTransaction block (currentGasLimit $ env test) signedTransaction
 
-        return (Right (), vmState)
+        case result of
+          Right (vmState, _) ->
+            return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
+          Left e -> return (Right (), Nothing, 0, [], Just [])
 
   allAddressStates2 <- lift getAllAddressStates
-  allAddressStates3 <-
+  afterAddressStates <-
       forM allAddressStates2 $ \(k, a') -> do
         a <- getDataAndRevertAddressState k a'
         return (k, a)
@@ -253,31 +257,27 @@ runTest test = do
 
   whenM isDebugEnabled $ do
     liftIO $ putStrLn "Before-------------"
-    liftIO $ putStrLn $ unlines $ showInfo <$> allAddressStates'
-    liftIO $ putStrLn "allAddressStates'-------------"
-    liftIO $ putStrLn $ unlines $ showInfo <$> allAddressStates3
-    liftIO $ putStrLn "post test-------------"
+    liftIO $ putStrLn $ unlines $ showInfo <$> beforeAddressStates
+    liftIO $ putStrLn "After-------------"
+    liftIO $ putStrLn $ unlines $ showInfo <$> afterAddressStates
+    liftIO $ putStrLn "Expected-------------"
     liftIO $ putStrLn $ unlines $ showInfo <$> (M.toList $ post test)
     liftIO $ putStrLn "-------------"
-    liftIO $ putStrLn $ "result Log: " ++ show (logs newVMState)
-    liftIO $ putStrLn "-------------"
-    liftIO $ putStrLn $ "expected Log: " ++ show (logs' test)
-    liftIO $ putStrLn "-------------"
 
-  case (RawData (fromMaybe B.empty $ returnVal newVMState) == out test,
-        (M.fromList allAddressStates3 == post test) || (M.null (post test) && isLeft result),
+  case (RawData (fromMaybe B.empty retVal) == out test,
+        (M.fromList afterAddressStates == post test) || (M.null (post test) && isLeft result),
         case remainingGas test of
           Nothing -> True
-          Just x -> vmGasRemaining newVMState == x,
-        logs newVMState == reverse (logs' test),
-        (callcreates test == fmap reverse (debugCallCreates newVMState)) || (isNothing (callcreates test) && (debugCallCreates newVMState == Just []))
+          Just x -> gasRemaining == x,
+        logs == reverse (logs' test),
+        (callcreates test == fmap reverse returnedCallCreates) || (isNothing (callcreates test) && (returnedCallCreates == Just []))
         ) of
     (False, _, _, _, _) -> return $ Left "result doesn't match"
     (_, False, _, _, _) -> return $ Left "address states don't match"
-    (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show (vmGasRemaining newVMState) ++ ", should be " ++ show (remainingGas test) ++ ", diff=" ++ show (vmGasRemaining newVMState - fromJust (remainingGas test))
+    (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show gasRemaining ++ ", should be " ++ show (remainingGas test) ++ ", diff=" ++ show (gasRemaining - fromJust (remainingGas test))
     (_, _, _, False, _) -> do
       liftIO $ putStrLn "llllllllllllllllllllll"
-      liftIO $ putStrLn $ show $ logs newVMState
+      liftIO $ putStrLn $ show $ logs
       liftIO $ putStrLn "llllllllllllllllllllll"
       liftIO $ putStrLn $ show $ logs' test
       liftIO $ putStrLn "llllllllllllllllllllll"
@@ -285,7 +285,7 @@ runTest test = do
     (_, _, _, _, False) -> do
       liftIO $ do
         putStrLn $ "callcreates test = " ++ show (callcreates test)
-        putStrLn $ "returnedCallCreates = " ++ show (debugCallCreates newVMState)
+        putStrLn $ "returnedCallCreates = " ++ show returnedCallCreates
       
       return $ Left $ "callcreates don't match"
     _ -> return $ Right "Success"
