@@ -44,18 +44,18 @@ vmTests =
 
 stateTests' =
   [
-    "./tests/StateTests/stTransactionTest.json",
+--    "./tests/StateTests/stTransactionTest.json",
 --    "./tests/StateTests/stInitCodeTest.json",
 --    "./tests/StateTests/stRecursiveCreate.json",
 --    "./tests/StateTests/stPreCompiledContracts.json",
 --    "./tests/StateTests/stSpecialTest.json",
 --    "./tests/StateTests/stLogTests.json",
 --    "./tests/StateTests/stBlockHashTest.json",
-    "./tests/StateTests/stSolidityTest.json",
+--    "./tests/StateTests/stSolidityTest.json",
 --    "./tests/StateTests/stExample.json",
-    "./tests/StateTests/stSystemOperationsTest.json",
-    --"./tests/StateTests/stMemoryStressTest.json",
-    "./tests/StateTests/stRefundTest.json"
+--    "./tests/StateTests/stSystemOperationsTest.json",
+    "./tests/StateTests/stMemoryStressTest.json"
+--    "./tests/StateTests/stRefundTest.json"
 --    "./tests/StateTests/stMemoryTest.json"
     --"./tests/StateTests/stQuadraticComplexityTest.json"
   ]
@@ -72,10 +72,10 @@ stateTests =
     "./tests/StateTests/stSolidityTest.json",
     "./tests/StateTests/stExample.json",
     "./tests/StateTests/stSystemOperationsTest.json",
-    --"./tests/StateTests/stMemoryStressTest.json",
+    "./tests/StateTests/stMemoryStressTest.json",
     "./tests/StateTests/stRefundTest.json",
-    "./tests/StateTests/stMemoryTest.json"
-    --"./tests/StateTests/stQuadraticComplexityTest.json"
+    "./tests/StateTests/stMemoryTest.json",
+    "./tests/StateTests/stQuadraticComplexityTest.json"
   ]
 
 testFiles::[String]
