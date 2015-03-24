@@ -203,7 +203,7 @@ runTest test = do
         (result, vmState) <-
           flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
           runEitherT $ do
-            runCodeFromStart 0
+            runCodeFromStart
 
             vmState <- lift get
             whenM (lift $ lift isDebugEnabled) $ do
@@ -323,7 +323,8 @@ main = do
 
   _ <- runResourceT $ do
     cxt <- openDBs "h"
-    runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] (length args == 2))) cxt
+    let debug = length args == 2
+    runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] debug)) cxt
 
   return ()
 
