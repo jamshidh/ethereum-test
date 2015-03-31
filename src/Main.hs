@@ -28,10 +28,11 @@ import Blockchain.BlockChain
 import qualified Blockchain.Colors as C
 import Blockchain.Context
 import Blockchain.Data.Address
-import Blockchain.Data.AddressState
-import Blockchain.Data.Block
+import Blockchain.Data.AddressStateDB
+import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
 import Blockchain.Context
+import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
@@ -83,7 +84,7 @@ populateAndConvertAddressState owner addressState' = do
     AddressState
       (nonce' addressState')
       (balance' addressState')
-      (contractRoot addressState)
+      (addressStateContractRoot addressState)
       (hash $ codeBytes $ contractCode' addressState')
 
 
@@ -98,12 +99,12 @@ showHexInt x = "0x" ++ showHex x ""
 getDataAndRevertAddressState::Address->AddressState->ContextM AddressState'
 getDataAndRevertAddressState owner addressState = do
   theCode <- lift $ fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
-             getCode (codeHash addressState)
+             getCode (addressStateCodeHash addressState)
   storage <- getAllStorageKeyVals' owner
   return $
     AddressState'
     (addressStateNonce addressState)
-    (balance addressState)
+    (addressStateBalance addressState)
     (M.fromList (map (\(key, val) -> (showHexInt $ byteString2Integer $ nibbleString2ByteString key, showHexInt $ fromIntegral val)) storage))
     (Code theCode)
 
@@ -159,25 +160,25 @@ runTest test = do
 
   let block =
         Block {
-          blockData = BlockData {
-             parentHash = previousHash . env $ test,
-             number = read . currentNumber . env $ test,
-             coinbase = currentCoinbase . env $ test,
-             difficulty = read . currentDifficulty . env $ test,
-             unclesHash = error "unclesHash undefined",
-             bStateRoot = error "bStateRoot undefined",
-             transactionsRoot = error "transactionsRoot undefined",
-             receiptsRoot = error "receiptsRoot undefined",
-             logBloom = error "logBloom undefined",
-             gasLimit = currentGasLimit . env $ test,
-             gasUsed = error "gasUsed undefined",
-             timestamp = currentTimestamp . env $ test,
+          blockBlockData = BlockData {
+             blockDataParentHash = previousHash . env $ test,
+             blockDataNumber = read . currentNumber . env $ test,
+             blockDataCoinbase = currentCoinbase . env $ test,
+             blockDataDifficulty = read . currentDifficulty . env $ test,
+             blockDataUnclesHash = error "unclesHash undefined",
+             blockDataStateRoot = error "bStateRoot undefined",
+             blockDataTransactionsRoot = error "transactionsRoot undefined",
+             blockDataReceiptsRoot = error "receiptsRoot undefined",
+             blockDataLogBloom = error "logBloom undefined",
+             blockDataGasLimit = currentGasLimit . env $ test,
+             blockDataGasUsed = error "gasUsed undefined",
+             blockDataTimestamp = currentTimestamp . env $ test,
              --timestamp = posixSecondsToUTCTime . fromInteger . read . currentTimestamp . env $ test,
-             extraData = error "extraData undefined",
-             nonce = error "nonce undefined"
+             blockDataExtraData = error "extraData undefined",
+             blockDataNonce = error "nonce undefined"
              },
-          receiptTransactions = error "receiptTransactions undefined",
-          blockUncles = error "blockUncles undefined"
+          blockReceiptTransactions = error "receiptTransactions undefined",
+          blockBlockUncles = error "blockUncles undefined"
           }
 
 
