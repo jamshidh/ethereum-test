@@ -15,6 +15,7 @@ executable ethereum-test
                      , ethereum-data-leveldb
                      , ethereum-merkle-patricia-db
                      , ethereum-rlp
+                     , ethereum-util
                      , haskoin
                      , IfElse
                      , time

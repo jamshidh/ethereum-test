@@ -34,7 +34,7 @@ import Blockchain.Data.Code
 import Blockchain.Context
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
-import Blockchain.Data.SignedTransaction
+--import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
@@ -42,7 +42,7 @@ import Blockchain.DBM
 import Blockchain.ExtDBs
 import Blockchain.Format
 import Blockchain.SHA
-import Blockchain.SigningTools
+--import Blockchain.SigningTools
 import Blockchain.Util
 import Blockchain.VM
 import Blockchain.VM.Code
@@ -216,31 +216,25 @@ runTest test = do
         return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
 
       ITransaction transaction -> do
-        let ut =
-              case tTo' transaction of
+        let t = case tTo' transaction of
                 Nothing ->
-                  ContractCreationTX {
-                    tNonce = getNumber $ tNonce' transaction,
-                    gasPrice = getNumber $ tGasPrice' transaction,
-                    tGasLimit = getNumber $ tGasLimit' transaction,
-                    value = getNumber $ tValue' transaction,
-                    tInit = Code $ theData $ tData' transaction
-                    }
+                  createContractCreationTX
+                    (getNumber $ tNonce' transaction)
+                    (getNumber $ tGasPrice' transaction)
+                    (getNumber $ tGasLimit' transaction)
+                    (getNumber $ tValue' transaction)
+                    (Code $ theData $ tData' transaction)
+                    (tSecretKey' transaction)
                 Just a ->
-                  MessageTX {
-                    tNonce = getNumber $ tNonce' transaction,
-                    gasPrice = getNumber $ tGasPrice' transaction,
-                    tGasLimit = getNumber $ tGasLimit' transaction,
-                    to = a,
-                    value = getNumber $ tValue' transaction,
-                    tData = theData $ tData' transaction
-                    }
-
-        signedTransaction <-
-          liftIO $ withSource Haskoin.devURandom $ 
-          signTransaction
-          (tSecretKey' transaction)
-          ut
+                  createMessageTX
+                    (getNumber $ tNonce' transaction)
+                    (getNumber $ tGasPrice' transaction)
+                    (getNumber $ tGasLimit' transaction)
+                    a
+                    (getNumber $ tValue' transaction)
+                    (theData $ tData' transaction)
+                    (tSecretKey' transaction)
+        signedTransaction <- liftIO $ withSource Haskoin.devURandom t
         result <-
           runEitherT $ addTransaction block (currentGasLimit $ env test) signedTransaction
 
