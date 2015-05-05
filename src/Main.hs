@@ -8,7 +8,9 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Either
 import Control.Monad.Trans.Resource
 import Control.Monad.Trans.State
+import qualified Crypto.Hash.SHA3 as SHA3
 import Data.Aeson
+import qualified Data.Binary as Bin
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
@@ -34,15 +36,14 @@ import Blockchain.Data.Code
 import Blockchain.Context
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
---import Blockchain.Data.SignedTransaction
 import Blockchain.Data.Transaction
 import Blockchain.Database.MerklePatricia
 import Blockchain.DB.CodeDB
 import Blockchain.DBM
 import Blockchain.ExtDBs
+import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
---import Blockchain.SigningTools
 import Blockchain.Util
 import Blockchain.VM
 import Blockchain.VM.Code
@@ -52,7 +53,7 @@ import qualified Data.NibbleString as N
 
 import TestDescriptions
 
---import Debug.Trace
+import Debug.Trace
 
 import TestFiles
 
@@ -60,23 +61,13 @@ nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString str) = str
 nibbleString2ByteString (N.OddNibbleString c str) = c `B.cons` str
 
-hexString2Word256::String->Haskoin.Word256
-hexString2Word256 "0x" = 0
-hexString2Word256 ('0':'x':rest) =
-  let
-    [(val, "")] = readHex rest
-  in
-   val
-hexString2Word256 x = error $ "hexString2Word256 called with input of wrong format: " ++ x
-
-
 
 populateAndConvertAddressState::Address->AddressState'->ContextM AddressState
 populateAndConvertAddressState owner addressState' = do
   lift . addCode . codeBytes . contractCode' $ addressState'
 
-  forM_ (M.toList $ storage' addressState') $ \(key, val) -> do
-    putStorageKeyVal' owner (hexString2Word256 key) (hexString2Word256 val)
+  forM_ (M.toList $ storage' addressState') $
+    \(key, val) -> do putStorageKeyVal' owner (fromIntegral key) (fromIntegral val)
 
   addressState <- lift $ getAddressState owner
 
@@ -92,9 +83,12 @@ populateAndConvertAddressState owner addressState' = do
 
 
 showHexInt::Integer->String
-showHexInt 0 = "0x"
-showHexInt x | odd $ length $ showHex x "" = "0x0" ++ showHex x ""
-showHexInt x = "0x" ++ showHex x ""
+showHexInt x
+  = let xHex = showHex x ""
+    in (if odd $ length xHex
+        then "0x0"
+        else "0x")
+       ++ xHex
 
 getDataAndRevertAddressState::Address->AddressState->ContextM AddressState'
 getDataAndRevertAddressState owner addressState = do
@@ -105,7 +99,9 @@ getDataAndRevertAddressState owner addressState = do
     AddressState'
     (addressStateNonce addressState)
     (addressStateBalance addressState)
-    (M.fromList (map (\(key, val) -> (showHexInt $ byteString2Integer $ nibbleString2ByteString key, showHexInt $ fromIntegral val)) storage))
+    (M.mapKeys (byteString2Integer . nibbleString2ByteString)
+     . M.map (fromIntegral)
+     $ M.fromList storage)
     (Code theCode)
 
 formatAddressState::AddressState'->String
@@ -139,7 +135,7 @@ isBlankCode _ = False
 showInfo::(Address,AddressState')->String
 showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=Code c}) = 
     show (pretty key) ++ "(" ++ show n ++ "): " ++ show b ++ 
-         (if M.null s then "" else ", " ++ show (M.toList s)) ++ 
+         (if M.null s then "" else ", " ++ show (M.toList $ M.map showHexInt $ M.mapKeys showHexInt $ s)) ++ 
          (if B.null c then "" else ", CODE:[" ++ C.blue (format c) ++ "]")
 
 
@@ -147,16 +143,17 @@ runTest::Test->ContextM (Either String String)
 runTest test = do
   lift $ setStateRoot emptyTriePtr
 
-  forM_ (M.toList $ pre test) $ \(address, addressState') -> do
-    addressState <- populateAndConvertAddressState address addressState'
-    lift $ putAddressState address addressState
+  forM_ (M.toList $ pre test) $
+    \(addr, s) -> do
+      state <- populateAndConvertAddressState addr s
+      lift $ putAddressState addr state
 
-
-  allAddressStates <- lift getAllAddressStates
-  beforeAddressStates <-
-      forM allAddressStates $ \(k, a') -> do
-        a <- getDataAndRevertAddressState k a'
-        return (k, a)
+  beforeAddressStates <- do
+    let testAddrs = M.keys $ pre test
+    beforeStates <- lift $ mapM getAddressState testAddrs
+    beforeStates' <- mapM (uncurry getDataAndRevertAddressState)
+                    $ zip testAddrs beforeStates
+    return $ zip testAddrs beforeStates'
 
   let block =
         Block {
@@ -180,7 +177,6 @@ runTest test = do
           blockReceiptTransactions = error "receiptTransactions undefined",
           blockBlockUncles = error "blockUncles undefined"
           }
-
 
   (result, retVal, gasRemaining, logs, returnedCallCreates) <-
     case theInput test of
@@ -243,12 +239,18 @@ runTest test = do
             return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
           Left e -> return (Right (), Nothing, 0, [], Just [])
 
-  allAddressStates2 <- lift getAllAddressStates
-  afterAddressStates <-
-      forM allAddressStates2 $ \(k, a') -> do
-        a <- getDataAndRevertAddressState k a'
-        return (k, a)
+  afterAddressStates <- do
+    let testAddrs = M.keys (pre test)
+    afterStates <- lift $ mapM getAddressState testAddrs
+    afterStates' <- mapM (uncurry getDataAndRevertAddressState)
+                    $ zip testAddrs afterStates
+    return $ zip testAddrs afterStates'
 
+  let hashInteger = byteString2Integer . nibbleString2ByteString . N.EvenNibbleString . (SHA3.hash 256) . nibbleString2ByteString . N.pack . (N.byte2Nibbles =<<) . word256ToBytes . fromIntegral
+
+  let postTest = M.toList $
+        flip M.map (post test) $
+        \s' -> s'{storage' = M.mapKeys hashInteger (storage' s')} 
 
   whenM isDebugEnabled $ do
     liftIO $ putStrLn "Before-------------"
@@ -256,11 +258,11 @@ runTest test = do
     liftIO $ putStrLn "After-------------"
     liftIO $ putStrLn $ unlines $ showInfo <$> afterAddressStates
     liftIO $ putStrLn "Expected-------------"
-    liftIO $ putStrLn $ unlines $ showInfo <$> (M.toList $ post test)
+    liftIO $ putStrLn $ unlines $ showInfo <$> postTest
     liftIO $ putStrLn "-------------"
 
   case (RawData (fromMaybe B.empty retVal) == out test,
-        (M.fromList afterAddressStates == post test) || (M.null (post test) && isLeft result),
+        (afterAddressStates == postTest) || (null postTest && isLeft result),
         case remainingGas test of
           Nothing -> True
           Just x -> gasRemaining == x,

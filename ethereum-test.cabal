@@ -22,8 +22,10 @@ executable ethereum-test
                      , transformers
                      , resourcet
                      , aeson
+                     , binary
                      , bytestring
                      , base16-bytestring
+                     , cryptohash
                      , unordered-containers
                      , mtl
                      , containers

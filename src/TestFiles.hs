@@ -35,7 +35,7 @@ vmTests =
     "./tests/VMTests/vmtests.json",
     "./tests/VMTests/vmEnvironmentalInfoTest.json",
     "./tests/VMTests/vmPerformanceTest.json",
-    "./tests/VMTests/vmBlockInfoTest.json",
+--    "./tests/VMTests/vmBlockInfoTest.json",
     "./tests/VMTests/vmLogTest.json",
     "./tests/VMTests/vmArithmeticTest.json",
     "./tests/VMTests/vmBitwiseLogicOperationTest.json",
