@@ -94,7 +94,16 @@ getDataAndRevertAddressState::Address->AddressState->ContextM AddressState'
 getDataAndRevertAddressState owner addressState = do
   theCode <- lift $ fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
              getCode (addressStateCodeHash addressState)
-  storage <- getAllStorageKeyVals' owner
+
+  -- Copied wholesale from Context.hs:getAllStorageKeyVals'
+  -- since that function requires an unhashed owner.
+  -- This piece of code really should be in the lib somewhere
+  storage <- do
+    dbs <- lift get
+    let mpdb = (stateDB dbs){stateRoot=addressStateContractRoot addressState}
+    kvs <- lift $ lift $ unsafeGetKeyVals mpdb ""
+    return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
+    
   return $
     AddressState'
     (addressStateNonce addressState)
@@ -134,9 +143,21 @@ isBlankCode _ = False
 
 showInfo::(Address,AddressState')->String
 showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=Code c}) = 
-    show (pretty key) ++ "(" ++ show n ++ "): " ++ show b ++ 
-         (if M.null s then "" else ", " ++ show (M.toList $ M.map showHexInt $ M.mapKeys showHexInt $ s)) ++ 
+    show (pretty key) ++ "[#ed]" ++ "(" ++ show n ++ "): " ++ show b ++ 
+         (if M.null s
+          then ""
+          else ", " ++ (show $ M.toList $
+               M.map showHexInt $ M.mapKeys ((++ "[#ed]") . showHexInt) s)
+         ) ++ 
          (if B.null c then "" else ", CODE:[" ++ C.blue (format c) ++ "]")
+
+addressStates::ContextM [(Address, AddressState')]
+addressStates = do
+  addrStates <- lift getAllAddressStates
+  let addrs = map fst addrStates
+      states = map snd addrStates
+  states' <- mapM (uncurry getDataAndRevertAddressState) $ zip addrs states
+  return $ zip addrs states'
 
 
 runTest::Test->ContextM (Either String String)
@@ -148,12 +169,7 @@ runTest test = do
       state <- populateAndConvertAddressState addr s
       lift $ putAddressState addr state
 
-  beforeAddressStates <- do
-    let testAddrs = M.keys $ pre test
-    beforeStates <- lift $ mapM getAddressState testAddrs
-    beforeStates' <- mapM (uncurry getDataAndRevertAddressState)
-                    $ zip testAddrs beforeStates
-    return $ zip testAddrs beforeStates'
+  beforeAddressStates <- addressStates
 
   let block =
         Block {
@@ -239,18 +255,16 @@ runTest test = do
             return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
           Left e -> return (Right (), Nothing, 0, [], Just [])
 
-  afterAddressStates <- do
-    let testAddrs = M.keys (pre test)
-    afterStates <- lift $ mapM getAddressState testAddrs
-    afterStates' <- mapM (uncurry getDataAndRevertAddressState)
-                    $ zip testAddrs afterStates
-    return $ zip testAddrs afterStates'
+
+  afterAddressStates <- addressStates
 
   let hashInteger = byteString2Integer . nibbleString2ByteString . N.EvenNibbleString . (SHA3.hash 256) . nibbleString2ByteString . N.pack . (N.byte2Nibbles =<<) . word256ToBytes . fromIntegral
+      hashAddress (Address s) = Address $ fromIntegral $ byteString2Integer $ nibbleString2ByteString $ N.EvenNibbleString $ (SHA3.hash 256) $ BL.toStrict $ Bin.encode s
 
   let postTest = M.toList $
-        flip M.map (post test) $
-        \s' -> s'{storage' = M.mapKeys hashInteger (storage' s')} 
+                 M.mapKeys hashAddress $
+                 flip M.map (post test) $
+                 \s' -> s'{storage' = M.mapKeys hashInteger (storage' s')} 
 
   whenM isDebugEnabled $ do
     liftIO $ putStrLn "Before-------------"
