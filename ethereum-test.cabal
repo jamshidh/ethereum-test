@@ -15,14 +15,17 @@ executable ethereum-test
                      , ethereum-data-leveldb
                      , ethereum-merkle-patricia-db
                      , ethereum-rlp
+                     , ethereum-util
                      , haskoin
                      , IfElse
                      , time
                      , transformers
                      , resourcet
                      , aeson
+                     , binary
                      , bytestring
                      , base16-bytestring
+                     , cryptohash
                      , unordered-containers
                      , mtl
                      , containers

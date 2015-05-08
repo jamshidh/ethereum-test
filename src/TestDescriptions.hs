@@ -25,6 +25,7 @@ import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import GHC.Generics hiding (to)
 import qualified Network.Haskoin.Internals as Haskoin
+import Numeric
 
 import Blockchain.Data.Address
 import Blockchain.Data.Code
@@ -51,7 +52,7 @@ data AddressState' =
   AddressState' {
     nonce'::Integer,
     balance'::Integer,
-    storage'::M.Map String String,
+    storage'::M.Map Integer Integer,
     contractCode'::Code
     } deriving (Generic, Show, Eq)
 
@@ -238,7 +239,13 @@ instance FromJSON AddressState' where
     v .: "code"
     where
       addressState'::String->String->M.Map String String->Code->AddressState'
-      addressState' w x y z = AddressState' (read w) (read x) y z
+      addressState' w x y z = AddressState' (hexOrDecString2Integer w) (hexOrDecString2Integer x) (readMap y) z
+      readMap = (M.map hexOrDecString2Integer) . (M.mapKeys hexOrDecString2Integer)
+      hexOrDecString2Integer "0x" = 0
+      hexOrDecString2Integer ('0':'x':rest) =
+        let [(val, "")] = readHex rest
+        in val
+      hexOrDecString2Integer x = read x
   parseJSON x = error $ "Wrong format when trying to parse AddressState' from JSON: " ++ show x
 
 instance FromJSON DebugCallCreate where
