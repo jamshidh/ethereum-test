@@ -1,5 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, FlexibleInstances #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE DeriveGeneric #-}
 
 module TestDescriptions (
   Env(..),
@@ -9,33 +8,23 @@ module TestDescriptions (
 --  CallCreate(..),
   RawData(..),
   InputWrapper(..),
-  Test(..),
+  TestData(..),
   Tests
   ) where
 
-import Control.Applicative
-import Data.Aeson
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Base16 as B16
-import qualified Data.ByteString.Char8 as BC
-import qualified Data.HashMap.Lazy as H
-import qualified Data.Map as M
-import qualified Data.Text as T
-import Data.Time.Clock
-import Data.Time.Clock.POSIX
-import GHC.Generics hiding (to)
-import qualified Network.Haskoin.Internals as Haskoin
-import Numeric
+-- External data modules
+import Data.ByteString (ByteString)
+import Data.Map (Map)
+import Data.Time.Clock (UTCTime(..))
+import GHC.Generics (Generic)
+import Network.Haskoin.Crypto (PrvKey(..))
 
-import Blockchain.Data.Address
-import Blockchain.Data.Code
-import Blockchain.Data.Log
-import Blockchain.Database.MerklePatricia
-import Blockchain.SHA
-import Blockchain.Util
-import Blockchain.VM.VMState
-
---import Debug.Trace
+-- Blockchain modules
+import Blockchain.Data.Address (Address(..))
+import Blockchain.Data.Code (Code(..))
+import Blockchain.Data.Log (Log(..))
+import Blockchain.SHA (SHA(..))
+import Blockchain.VM.VMState (DebugCallCreate(..))
 
 data Env =
   Env {
@@ -52,11 +41,11 @@ data AddressState' =
   AddressState' {
     nonce'::Integer,
     balance'::Integer,
-    storage'::M.Map Integer Integer,
+    storage'::Map Integer Integer,
     contractCode'::Code
     } deriving (Generic, Show, Eq)
 
-newtype RawData = RawData { theData::B.ByteString } deriving (Show, Eq)
+newtype RawData = RawData { theData::ByteString } deriving (Show, Eq)
 
 data Exec =
   Exec {
@@ -76,7 +65,7 @@ data Transaction' =
     tGasLimit'::String,
     tGasPrice'::String,
     tNonce'::String,
-    tSecretKey'::Haskoin.PrvKey,
+    tSecretKey'::PrvKey,
     tTo'::Maybe Address,
     tValue'::String
     } deriving (Show)
@@ -103,7 +92,7 @@ data Log =
     } deriving (Show, Eq)
 -}
 
-data Test =
+data TestData =
   Test {
     callcreates::Maybe [DebugCallCreate],
     env::Env,
@@ -115,217 +104,12 @@ data Test =
     remainingGas::Maybe Integer,
     logs'::[Log],
     out::RawData,
-    pre::M.Map Address AddressState',
-    post::M.Map Address AddressState'
+    pre::Map Address AddressState',
+    post::Map Address AddressState'
     } deriving (Generic, Show)
 
-type Tests = M.Map String Test
-
-convertAddressAndAddressInfo::M.Map String AddressState'->M.Map Address AddressState'
-convertAddressAndAddressInfo = M.fromList . map convertPre' . M.toList
-    where
-      convertPre'::(String, AddressState')->(Address, AddressState')
-      convertPre' (addressString, addressState) = (Address $ fromInteger $ byteString2Integer $ fst $ B16.decode $ BC.pack addressString, addressState)
+type Tests = Map String TestData
 
 
-instance FromJSON Test where
-  parseJSON (Object v) | H.member "exec" v =
-    test <$>
-    v .:? "callcreates" <*>
-    v .: "env" <*>
-    v .: "exec" <*>
-{-    v .: "exec" <*>
-    v .: "transaction" <*> -}
-    v .:? "gas" <*>
-    v .:? "logs" .!= [] <*>
-    v .:? "out" .!= (RawData B.empty) <*>
-    v .: "pre" <*>
-    v .:? "post" .!= M.empty
-    where
-       test v1 v2 exec gas v5 v6 v7 v8 = Test v1 v2 (IExec exec) (fmap read gas) v5 v6 (convertAddressAndAddressInfo v7) (convertAddressAndAddressInfo v8)
-  parseJSON (Object v) | H.member "transaction" v =
-    test <$>
-    v .:? "callcreates" <*>
-    v .: "env" <*>
-    v .: "transaction" <*>
-{-    v .: "exec" <*>
-    v .: "transaction" <*> -}
-    v .:? "gas" <*>
-    v .:? "logs" .!= [] <*>
-    v .:? "out" .!= (RawData B.empty) <*>
-    v .: "pre" <*>
-    v .:? "post" .!= M.empty
-    where
-       test v1 v2 transaction gas v5 v6 v7 v8 = Test v1 v2 (ITransaction transaction) (fmap read gas) v5 v6 (convertAddressAndAddressInfo v7) (convertAddressAndAddressInfo v8)
-  parseJSON x = error $ "Missing case in parseJSON for Test: " ++ show x
 
-
---Same as an Integer, but can be pulled from json files as either a json number or string (like "2")
-newtype SloppyInteger = SloppyInteger Integer
-
-sloppyInteger2Integer::SloppyInteger->Integer
-sloppyInteger2Integer (SloppyInteger x) = x
-
-instance FromJSON SloppyInteger where
-  parseJSON (Number x) = return $ SloppyInteger $ floor x
-  parseJSON (String x) = return $ SloppyInteger $ floor $ (read $ T.unpack x::Double)
-  parseJSON x = error $ "Wrong format when trying to parse SloppyInteger from JSON: " ++ show x
-
-instance FromJSON Exec where
-  parseJSON (Object v) =
-    Exec <$>
-    v .: "address" <*>
-    v .: "caller" <*>
-    v .: "code" <*>
-    v .: "data" <*>
-    v .: "gas" <*>
-    v .: "gasPrice" <*>
-    v .: "origin" <*>
-    v .: "value"
-  parseJSON x = error $ "Wrong format when trying to parse Exec from JSON: " ++ show x
-
-instance FromJSON (Maybe Address) where
-  parseJSON (String "") = pure Nothing
-  parseJSON (String v) = fmap Just $ parseJSON (String v)
-  parseJSON x = error $ "Wrong format when trying to parse 'Maybe Address' from JSON: " ++ show x
-
-instance FromJSON Transaction' where
-  parseJSON (Object v) =
-    Transaction' <$>
-    v .: "data" <*>
-    v .: "gasLimit" <*>
-    v .: "gasPrice" <*>
-    v .: "nonce" <*>
-    v .: "secretKey" <*>
-    v .: "to" <*>
-    v .: "value"
-  parseJSON x = error $ "Wrong format when trying to parse Transaction' from JSON: " ++ show x
-
-instance FromJSON Env where
-  parseJSON (Object v) =
-    env' <$>
-    v .: "currentCoinbase" <*>
-    v .: "currentDifficulty" <*>
-    v .: "currentGasLimit" <*>
-    v .: "currentNumber" <*>
-    v .: "currentTimestamp" <*>
-    v .: "previousHash"
-    where
-      env' v1 v2 currentGasLimit' v4 currentTimestamp' v6 =
-        Env v1 v2 (read currentGasLimit') v4 (posixSecondsToUTCTime . fromInteger . sloppyInteger2Integer $ currentTimestamp') v6
-  parseJSON x = error $ "Wrong format when trying to parse Env from JSON: " ++ show x
-
-
-{-
-instance FromJSON AddressState where
-  parseJSON (Object v) =
-    addressState <$>
-    v .: "nonce" <*>
-    v .: "balance" <*>
-    v .: "storage" <*>
-    v .: "code"
-    where
-      addressState::String->String->Object->SHA->AddressState
-      addressState w x y z = AddressState (read w) (read x) emptyTriePtr z
-  parseJSON x = error $ "Wrong format when trying to parse AddressState from JSON: " ++ show x
--}
-
-instance FromJSON AddressState' where
-  parseJSON (Object v) =
-    addressState' <$>
-    v .: "nonce" <*>
-    v .: "balance" <*>
-    v .: "storage" <*>
-    v .: "code"
-    where
-      addressState'::String->String->M.Map String String->Code->AddressState'
-      addressState' w x y z = AddressState' (hexOrDecString2Integer w) (hexOrDecString2Integer x) (readMap y) z
-      readMap = (M.map hexOrDecString2Integer) . (M.mapKeys hexOrDecString2Integer)
-      hexOrDecString2Integer "0x" = 0
-      hexOrDecString2Integer ('0':'x':rest) =
-        let [(val, "")] = readHex rest
-        in val
-      hexOrDecString2Integer x = read x
-  parseJSON x = error $ "Wrong format when trying to parse AddressState' from JSON: " ++ show x
-
-instance FromJSON DebugCallCreate where
-  parseJSON (Object v) =
-    debugCallCreate' <$>
-    v .: "data" <*>
-    v .: "destination" <*>
-    v .: "gasLimit" <*>
-    v .: "value"
-    where
-      debugCallCreate' v1 v2 gasLimit val = DebugCallCreate v1 v2 (read gasLimit) (read val)
-  parseJSON x = error $ "Wrong format when trying to parse CallCreate from JSON: " ++ show x
-
-instance FromJSON Log where
-  parseJSON (Object v) =
-    log' <$>
-    v .: "address" <*>
-    v .: "bloom" <*>
-    v .: "data" <*>
-    v .: "topics"
-    where
-      log' v1 v2 v3 v4 = Log v1 (fromIntegral $ byteString2Integer $ fst $ B16.decode v2) v3 v4
-  parseJSON x = error $ "Wrong format when trying to parse Log from JSON: " ++ show x
-
-b16_decode_optional0x::B.ByteString->(B.ByteString, B.ByteString)
-b16_decode_optional0x x = 
-  case BC.unpack x of
-    ('0':'x':rest) -> B16.decode $ BC.pack rest
-    _ -> B16.decode x
-
-
-instance FromJSON Address where
-  parseJSON =
-    withText "Address" $
-    pure . Address . fromIntegral . byteString2Integer . fst . b16_decode_optional0x . BC.pack . T.unpack
-
-instance FromJSON B.ByteString where
-  parseJSON =
-    withText "Address" $
-    pure . string2ByteString . T.unpack
-    where
-      string2ByteString::String->B.ByteString
-      string2ByteString ('0':'x':rest) = fst . B16.decode . BC.pack $ rest
-      string2ByteString x = fst . B16.decode . BC.pack $ x
-
-instance FromJSON Code where
-  parseJSON =
-    withText "SHA" $
-    pure . string2Code . T.unpack
-    where
-      string2Code::String->Code
-      string2Code ('0':'x':rest) = Code . fst . B16.decode . BC.pack $ rest
-      string2Code x = error $ "string2Code called with input of wrong format: " ++ x
-
-instance FromJSON Haskoin.PrvKey where
-  parseJSON =
-    withText "PrvKey" $
-    pure . Haskoin.PrvKey . fromInteger . byteString2Integer . fst . B16.decode . BC.pack . T.unpack
-
-instance FromJSON RawData where
-  parseJSON =
-    withText "RawData" $
-    pure . string2RawData . T.unpack
-    where
-      string2RawData::String->RawData
-      string2RawData ('0':'x':rest) = RawData . fst . B16.decode . BC.pack $ rest
-      string2RawData "" = RawData B.empty
-      string2RawData x = error $ "Missing case in string2RawData: " ++ show x
-
-instance FromJSON SHA where
-  parseJSON =
-    withText "SHA" $
-    pure . string2SHA . T.unpack
-    where
-      string2SHA::String->SHA
-      string2SHA ('0':'x':rest) = SHA . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ rest
-      string2SHA x = SHA . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ x
-
-instance FromJSON SHAPtr where
-  parseJSON =
-    withText "SHAPtr" $
-    pure . SHAPtr . fst . B16.decode . BC.pack . T.unpack
 
