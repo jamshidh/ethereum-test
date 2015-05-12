@@ -1,6 +1,6 @@
 -- The functions in this module don't really stand on their own.
 -- They're only here for neatness.
-module Debug (debugAddressStates, debugSuicideList, withDebug) where
+module Debug (showHexInt, debugAddressStates, debugSuicideList, withDebug) where
 
 -- External function modules
 import Control.Monad.IfElse (whenM)

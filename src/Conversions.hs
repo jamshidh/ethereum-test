@@ -7,6 +7,8 @@ import qualified Crypto.Hash.SHA3 as SHA3
 import qualified Data.Binary as Bin
 import qualified Data.ByteString as ByteS
 import qualified Data.ByteString.Lazy as ByteSL
+import Data.Function (on)
+import Data.List (sortBy)
 import qualified Data.Map as Map
 import qualified Data.NibbleString as NibbS
 
@@ -22,6 +24,7 @@ import TestDescriptions
 -- where we remember the hashes of the actual keys
 makeHashed::(Map.Map Address AddressState') -> [(Address, AddressState')]
 makeHashed m =
+  sortBy (compare `on` fst) $
   Map.toList $ Map.mapKeys hashAddress $
   flip Map.map m $ \s' ->
   s'{storage' = Map.mapKeys hashInteger (storage' s')}

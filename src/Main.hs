@@ -13,10 +13,10 @@ import Control.Applicative ((<$>))
 import qualified Data.ByteString as ByteS
 import Data.Either (isLeft)
 import Data.Function (on)
-import Data.List (findIndex, deleteBy)
+import Data.List (findIndex, deleteBy, intercalate, sortBy)
 import qualified Data.Map as Map
 import Data.Maybe (isJust, isNothing, fromJust, fromMaybe)
---import Debug.Trace
+import Debug.Trace
 import Network.Haskoin.Crypto (withSource, devURandom)
 import System.Environment (getProgName, getArgs)
 import System.FilePath (takeFileName, (</>))
@@ -142,7 +142,7 @@ addressStates = do
   let addrs = map fst addrStates
       states = map snd addrStates
   states' <- mapM getDataAndRevertAddressState states
-  return $ zip addrs states'
+  return $ sortBy (compare `on` fst) $ zip addrs states'
 
 doTest test@Test{theInput = IExec Exec{gas = g}} = do
   vmState <- liftIO $ startingState (testExecEnv test)
@@ -153,7 +153,7 @@ doTest test@Test{theInput = IExec Exec{gas = g}} = do
       vmState' <- lift get
       debugSuicideList vmState'
       forM_ (suicideList vmState') $ lift . lift . lift . deleteAddressState
-  return (result, returnVal vmState, vmGasRemaining vmState',
+  return (result, returnVal vmState', vmGasRemaining vmState',
           logs vmState', debugCallCreates vmState')
   
 doTest test@Test{theInput = ITransaction _, env = Env{currentGasLimit = gL}} = do
@@ -191,16 +191,24 @@ showResults
 analyzeResults False  _  _  _  _
   (_, retVal, _, _, _) (RawData retVal0, _, _, _, _)
   = Left ("return values don't match",
-          "returned (actual) : " ++ show (fromMaybe ByteS.empty retVal) ++ "\n" ++
-          "returned (correct): " ++ show retVal0 ++ "\n")
+          "returned (actual) : " ++ retValS  ++ "\n" ++
+          "returned (correct): " ++ retValS0 ++ "\n")
+    where
+      retValS = bytesToHex (fromMaybe ByteS.empty retVal)
+      retValS0= bytesToHex retVal0
+      bytesToHex = intercalate " " . map showHexInt . ByteS.unpack
 analyzeResults _  False  _  _  _ _ _ = Left ("address states don't match", "")
 analyzeResults _  _  False  _  _
   (_, _, gasRemaining, _, _) (_, _, gasRemaining0, _, _) =
     Left
     ("remaining gas doesn't match",
-     "remaining (actual) : " ++ show gasRemaining ++ "\n" ++
-     "remaining (correct): " ++ show gasRemaining0 ++ "\n" ++
-     "difference = " ++ show (gasRemaining - fromJust gasRemaining0))
+     "remaining (actual) : " ++ show gasRemainingN ++ "\n" ++
+     "remaining (correct): " ++ show gasRemaining0N ++ "\n" ++
+     "difference = " ++ show (gasRemainingN - gasRemaining0N))
+
+    where
+      gasRemainingN = gasRemaining
+      gasRemaining0N= fromMaybe gasRemaining gasRemaining0
 analyzeResults _  _  _  False  _
   (_, _, _, logsR, _) (_, _, _, logs0, _) =
     Left ("logs don't match",
