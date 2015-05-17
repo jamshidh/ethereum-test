@@ -18,7 +18,7 @@ import Blockchain.Data.BlockDB (Block(..), BlockData(..))
 import Blockchain.Data.Code (codeBytes, Code(..))
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction (createContractCreationTX, createMessageTX)
-import Blockchain.Database.MerklePatricia (unsafeGetKeyVals, MPDB(..))
+import Blockchain.Database.MerklePatricia.Internal (unsafeGetKeyVals, MPDB(..))
 import Blockchain.DB.CodeDB (addCode, getCode)
 import Blockchain.DBM (DBs(..))
 import Blockchain.Format (format)
