@@ -7,6 +7,8 @@ packages:
 - 'ethereum-rlp'
 - 'ethereum-util'
 - 'ethereum-data-sql'
+- 'ethereum-encryption'
+- 'ethereum-conf'
 
 extra-deps: 
 - SHA2-0.2.5
@@ -16,5 +18,6 @@ extra-deps:
 - AES-0.2.9
 - json-rpc-0.7.0.2
 - pbkdf-1.1.1.1
+- Crypto-4.2.5.1
 
 flags: {}
