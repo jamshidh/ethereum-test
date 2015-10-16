@@ -11,8 +11,8 @@ executable ethereum-test
   build-depends:       base >=4.7 && <4.8
                      , nibblestring
                      , either
-                     , ethereum-client-haskell
-                     , ethereum-data-leveldb
+                     , ethereum-vm
+                     , ethereum-data-sql
                      , ethereum-merkle-patricia-db
                      , ethereum-rlp
                      , ethereum-util
