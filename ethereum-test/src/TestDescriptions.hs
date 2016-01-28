@@ -303,7 +303,7 @@ instance FromJSON Code where
 instance FromJSON Haskoin.PrvKey where
   parseJSON =
     withText "PrvKey" $
-    pure . Haskoin.PrvKey . fromInteger . byteString2Integer . fst . B16.decode . BC.pack . T.unpack
+    pure . Haskoin.makePrvKey . fromInteger . byteString2Integer . fst . B16.decode . BC.pack . T.unpack
 
 instance FromJSON RawData where
   parseJSON =
