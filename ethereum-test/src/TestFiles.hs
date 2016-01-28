@@ -26,6 +26,7 @@ module TestFiles where
 --    "./tests/BasicTests/crypto.json",
 --    "./tests/PoWTests/ethash_tests.json",
 
+vmTests::[String]
 vmTests = 
   [
     "./tests/VMTests/vmSha3Test.json",
@@ -42,6 +43,7 @@ vmTests =
     "./tests/VMTests/vmIOandFlowOperationsTest.json"
   ]
 
+stateTests'::[String]
 stateTests' =
   [
 --    "./tests/StateTests/stTransactionTest.json",
@@ -60,6 +62,7 @@ stateTests' =
     --"./tests/StateTests/stQuadraticComplexityTest.json"
   ]
 
+stateTests::[String]
 stateTests =
   [
     "./tests/StateTests/stTransactionTest.json",
