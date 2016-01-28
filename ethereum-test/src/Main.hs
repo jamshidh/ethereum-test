@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings, FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric, OverloadedStrings, FlexibleInstances, TemplateHaskell #-}
 
 import Control.Applicative
 import Control.Monad
@@ -19,15 +19,20 @@ import Data.Either
 import Data.List
 import qualified Data.Map as M
 import Data.Maybe
+import qualified Data.Set as S
+import HFlags
 import qualified Network.Haskoin.Internals as Haskoin
 import Network.Haskoin.Crypto (withSource)
 import Numeric
-import System.Environment
 import System.Directory
-import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
+import System.Environment
+import System.FilePath
+import Text.PrettyPrint.ANSI.Leijen hiding ((<$>), (</>))
+import qualified Database.LevelDB as DB
 
 import Blockchain.BlockChain
 import qualified Blockchain.Colors as C
+import Blockchain.Constants
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
@@ -36,7 +41,9 @@ import Blockchain.VMContext
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
-import Blockchain.Database.MerklePatricia
+import qualified Blockchain.Database.MerklePatricia as MP
+import Blockchain.Database.MerklePatricia.Internal
+import Blockchain.DB.StateDB
 import Blockchain.DB.CodeDB
 import Blockchain.DBM
 import Blockchain.ExtDBs
@@ -48,6 +55,7 @@ import Blockchain.VM
 import Blockchain.VM.Code
 import Blockchain.VM.Environment
 import Blockchain.VM.VMState
+import Blockchain.VMOptions
 import qualified Data.NibbleString as N
 
 import TestDescriptions
@@ -56,19 +64,22 @@ import Debug.Trace
 
 import TestFiles
 
+debugEnabled=False
+
+{-
 nibbleString2ByteString::N.NibbleString->B.ByteString
 nibbleString2ByteString (N.EvenNibbleString str) = str
 nibbleString2ByteString (N.OddNibbleString c str) = c `B.cons` str
-
+-}
 
 populateAndConvertAddressState::Address->AddressState'->ContextM AddressState
 populateAndConvertAddressState owner addressState' = do
-  lift . addCode . codeBytes . contractCode' $ addressState'
+  addCode . codeBytes . contractCode' $ addressState'
 
   forM_ (M.toList $ storage' addressState') $
     \(key, val) -> do putStorageKeyVal' owner (fromIntegral key) (fromIntegral val)
 
-  addressState <- lift $ getAddressState owner
+  addressState <- getAddressState owner
 
   return $
     AddressState
@@ -91,16 +102,16 @@ showHexInt x
 
 getDataAndRevertAddressState::Address->AddressState->ContextM AddressState'
 getDataAndRevertAddressState owner addressState = do
-  theCode <- lift $ fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
+  theCode <- fmap (fromMaybe (error $ "Missing code in getDataAndRevertAddressState: " ++ format addressState)) $
              getCode (addressStateCodeHash addressState)
 
   -- Copied wholesale from Context.hs:getAllStorageKeyVals'
   -- since that function requires an unhashed owner.
   -- This piece of code really should be in the lib somewhere
   storage <- do
-    dbs <- lift get
-    let mpdb = (stateDB dbs){stateRoot=addressStateContractRoot addressState}
-    kvs <- lift $ lift $ unsafeGetKeyVals mpdb ""
+    dbs <- get
+    let mpdb = (contextStateDB dbs){stateRoot=addressStateContractRoot addressState}
+    kvs <- lift $ unsafeGetKeyVals mpdb ""
     return $ map (fmap $ fromInteger . rlpDecode . rlpDeserialize . rlpDecode) kvs
     
   return $
@@ -152,7 +163,7 @@ showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=
 
 addressStates::ContextM [(Address, AddressState')]
 addressStates = do
-  addrStates <- lift getAllAddressStates
+  addrStates <- getAllAddressStates
   let addrs = map fst addrStates
       states = map snd addrStates
   states' <- mapM (uncurry getDataAndRevertAddressState) $ zip addrs states
@@ -161,12 +172,12 @@ addressStates = do
 
 runTest::Test->ContextM (Either String String)
 runTest test = do
-  lift $ setStateRoot emptyTriePtr
+  setStateDBStateRoot emptyTriePtr
 
   forM_ (M.toList $ pre test) $
     \(addr, s) -> do
       state <- populateAndConvertAddressState addr s
-      lift $ putAddressState addr state
+      putAddressState addr state
 
   beforeAddressStates <- addressStates
 
@@ -187,7 +198,8 @@ runTest test = do
              blockDataTimestamp = currentTimestamp . env $ test,
              --timestamp = posixSecondsToUTCTime . fromInteger . read . currentTimestamp . env $ test,
              blockDataExtraData = error "extraData undefined",
-             blockDataNonce = error "nonce undefined"
+             blockDataNonce = error "nonce undefined",
+             blockDataMixHash=error "mixHash undefined"
              },
           blockReceiptTransactions = error "receiptTransactions undefined",
           blockBlockUncles = error "blockUncles undefined"
@@ -210,19 +222,20 @@ runTest test = do
                 envJumpDests = getValidJUMPDESTs $ code exec
                 }
 
-        vmState <- liftIO $ startingState env
+        cxt <- get
+        vmState <- liftIO $ startingState env cxt
 
-        (result, vmState) <-
+        (result, vmState) <- lift $
           flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
           runEitherT $ do
             runCodeFromStart
 
             vmState <- lift get
-            whenM (lift $ lift isDebugEnabled) $ do
+            when debugEnabled $ do
               liftIO $ putStrLn $ "Removing accounts in suicideList: " ++
-                                intercalate ", " (show . pretty <$> suicideList vmState)
+                                intercalate ", " (show . pretty <$> S.toList (suicideList vmState))
 
-            forM_ (suicideList vmState) $ lift . lift . lift . deleteAddressState
+            forM_ (suicideList vmState) $ deleteAddressState
 
         return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
 
@@ -265,7 +278,7 @@ runTest test = do
                  flip M.map (post test) $
                  \s' -> s'{storage' = M.mapKeys hashInteger (storage' s')} 
 
-  whenM isDebugEnabled $ do
+  when debugEnabled $ do
     liftIO $ putStrLn "Before-------------"
     liftIO $ putStrLn $ unlines $ showInfo <$> beforeAddressStates
     liftIO $ putStrLn "After-------------"
@@ -315,6 +328,7 @@ runTests tests = do
 
 main::IO ()
 main = do
+  _ <- $initHFlags "The Ethereum Test program"
   testsExist <- doesDirectoryExist "tests"
   when (not testsExist) $
     error "You need to clone the git repository at https://github.com/ethereum/tests.git"
@@ -330,11 +344,26 @@ main = do
   
   --let theFileName = testFiles !! read fileNumber
 
+  homeDir <- getHomeDirectory
 
   _ <- runResourceT $ do
-    cxt <- openDBs "h"
+    dbs <- openDBs
+    sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
+           DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+    hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
+           DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+    cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
+           DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
+
+
     let debug = length args == 2
-    runStateT (runStateT (runAllTests maybeFileName maybeTestName) (Context [] 0 [] debug)) cxt
+    runStateT (runAllTests maybeFileName maybeTestName) (Context
+                                                         MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
+                                                         hdb
+                                                         cdb
+                                                         (sqlDB' dbs)
+                                                         Nothing
+                                                         M.empty)
 
   return ()
 

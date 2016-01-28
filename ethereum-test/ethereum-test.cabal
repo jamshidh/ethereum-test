@@ -9,29 +9,32 @@ cabal-version:       >=1.10
 executable ethereum-test
   main-is:             Main.hs
   build-depends:       base
-                     , nibblestring
-                     , either
-                     , ethereum-vm
-                     , blockapps-data
-                     , merkle-patricia-db
-                     , ethereum-rlp
-                     , blockapps-util
-                     , haskoin
-                     , IfElse
-                     , time
-                     , transformers
-                     , resourcet
                      , aeson
-                     , binary
-                     , bytestring
                      , base16-bytestring
-                     , cryptohash
-                     , unordered-containers
-                     , mtl
+                     , binary
+                     , blockapps-data
+                     , blockapps-util
+                     , bytestring
                      , containers
+                     , cryptohash
+                     , directory
+                     , either
+                     , ethereum-rlp
+                     , ethereum-vm
+                     , filepath
+                     , haskoin
+                     , hflags
+                     , IfElse
+                     , leveldb-haskell
+                     , merkle-patricia-db
+                     , mtl
+                     , nibblestring
+                     , resourcet
                      , scientific
                      , text
-                     , directory
+                     , time
+                     , transformers
+                     , unordered-containers
                      , ansi-wl-pprint
   ghc-options:         -Wall -O2
   hs-source-dirs:      src

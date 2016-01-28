@@ -20,6 +20,7 @@ import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Char8 as BC
 import qualified Data.HashMap.Lazy as H
 import qualified Data.Map as M
+import Data.Maybe
 import qualified Data.Text as T
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
@@ -209,7 +210,7 @@ instance FromJSON Env where
     v .: "currentGasLimit" <*>
     v .: "currentNumber" <*>
     v .: "currentTimestamp" <*>
-    v .: "previousHash"
+    v .:? "previousHash" .!= undefined
     where
       env' v1 v2 currentGasLimit' v4 currentTimestamp' v6 =
         Env v1 v2 (read currentGasLimit') v4 (posixSecondsToUTCTime . fromInteger . sloppyInteger2Integer $ currentTimestamp') v6
@@ -277,11 +278,14 @@ b16_decode_optional0x x =
     _ -> B16.decode x
 
 
+{- DOIT Readd
 instance FromJSON Address where
   parseJSON =
     withText "Address" $
     pure . Address . fromIntegral . byteString2Integer . fst . b16_decode_optional0x . BC.pack . T.unpack
+-}
 
+{- DOIT Readd
 instance FromJSON B.ByteString where
   parseJSON =
     withText "Address" $
@@ -290,6 +294,7 @@ instance FromJSON B.ByteString where
       string2ByteString::String->B.ByteString
       string2ByteString ('0':'x':rest) = fst . B16.decode . BC.pack $ rest
       string2ByteString x = fst . B16.decode . BC.pack $ x
+-}
 
 instance FromJSON Code where
   parseJSON =
@@ -303,7 +308,7 @@ instance FromJSON Code where
 instance FromJSON Haskoin.PrvKey where
   parseJSON =
     withText "PrvKey" $
-    pure . Haskoin.makePrvKey . fromInteger . byteString2Integer . fst . B16.decode . BC.pack . T.unpack
+    pure . fromJust . Haskoin.makePrvKey . fromInteger . byteString2Integer . fst . B16.decode . BC.pack . T.unpack
 
 instance FromJSON RawData where
   parseJSON =
@@ -315,6 +320,7 @@ instance FromJSON RawData where
       string2RawData "" = RawData B.empty
       string2RawData x = error $ "Missing case in string2RawData: " ++ show x
 
+{- DOIT Readd
 instance FromJSON SHA where
   parseJSON =
     withText "SHA" $
@@ -323,9 +329,11 @@ instance FromJSON SHA where
       string2SHA::String->SHA
       string2SHA ('0':'x':rest) = SHA . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ rest
       string2SHA x = SHA . fromIntegral . byteString2Integer . fst . B16.decode . BC.pack $ x
+-}
 
+{- DOIT Readd
 instance FromJSON SHAPtr where
   parseJSON =
     withText "SHAPtr" $
     pure . SHAPtr . fst . B16.decode . BC.pack . T.unpack
-
+-}
