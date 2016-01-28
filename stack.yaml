@@ -3,12 +3,12 @@ resolver: lts-3.4
 packages:
 - 'ethereum-test'
 - 'ethereum-vm'
-- 'ethereum-merkle-patricia-db'
+- 'merkle-patricia-db'
 - 'ethereum-rlp'
-- 'ethereum-util'
-- 'ethereum-data-sql'
+- 'blockapps-util'
+- 'blockapps-data'
 - 'ethereum-encryption'
-- 'ethereum-conf'
+- 'strato-conf'
 - location:
     git: https://github.com/haskoin/haskoin
     commit: b71bcfa4701e129b69776e6951fe0bb7c8b26ea3
