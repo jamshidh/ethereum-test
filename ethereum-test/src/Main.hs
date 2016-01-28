@@ -28,12 +28,11 @@ import Text.PrettyPrint.ANSI.Leijen hiding ((<$>))
 
 import Blockchain.BlockChain
 import qualified Blockchain.Colors as C
-import Blockchain.Context
 import Blockchain.Data.Address
 import Blockchain.Data.AddressStateDB
 import Blockchain.Data.BlockDB
 import Blockchain.Data.Code
-import Blockchain.Context
+import Blockchain.VMContext
 import Blockchain.Data.DataDefs
 import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
