@@ -188,21 +188,21 @@ runTest test = do
              blockDataNumber = read . currentNumber . env $ test,
              blockDataCoinbase = currentCoinbase . env $ test,
              blockDataDifficulty = read . currentDifficulty . env $ test,
-             blockDataUnclesHash = error "unclesHash undefined",
-             blockDataStateRoot = error "bStateRoot undefined",
-             blockDataTransactionsRoot = error "transactionsRoot undefined",
-             blockDataReceiptsRoot = error "receiptsRoot undefined",
-             blockDataLogBloom = error "logBloom undefined",
+             blockDataUnclesHash = SHA 0, --error "unclesHash undefined",
+             blockDataStateRoot = SHAPtr "", --error "bStateRoot undefined",
+             blockDataTransactionsRoot = SHAPtr "", --error "transactionsRoot undefined",
+             blockDataReceiptsRoot = SHAPtr "", --error "receiptsRoot undefined",
+             blockDataLogBloom = "", --error "logBloom undefined",
              blockDataGasLimit = currentGasLimit . env $ test,
-             blockDataGasUsed = error "gasUsed undefined",
+             blockDataGasUsed = 0, --error "gasUsed undefined",
              blockDataTimestamp = currentTimestamp . env $ test,
              --timestamp = posixSecondsToUTCTime . fromInteger . read . currentTimestamp . env $ test,
-             blockDataExtraData = error "extraData undefined",
-             blockDataNonce = error "nonce undefined",
-             blockDataMixHash=error "mixHash undefined"
+             blockDataExtraData = 0, --error "extraData undefined",
+             blockDataNonce = 0, --error "nonce undefined",
+             blockDataMixHash=SHA 0 --error "mixHash undefined"
              },
-          blockReceiptTransactions = error "receiptTransactions undefined",
-          blockBlockUncles = error "blockUncles undefined"
+          blockReceiptTransactions = [], --error "receiptTransactions undefined",
+          blockBlockUncles = [] --error "blockUncles undefined"
           }
 
   (result, retVal, gasRemaining, logs, returnedCallCreates) <-

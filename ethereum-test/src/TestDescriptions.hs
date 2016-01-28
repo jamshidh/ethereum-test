@@ -210,7 +210,7 @@ instance FromJSON Env where
     v .: "currentGasLimit" <*>
     v .: "currentNumber" <*>
     v .: "currentTimestamp" <*>
-    v .:? "previousHash" .!= undefined
+    v .:? "previousHash" .!= SHA 0 --error "previousHash undefined"
     where
       env' v1 v2 currentGasLimit' v4 currentTimestamp' v6 =
         Env v1 v2 (read currentGasLimit') v4 (posixSecondsToUTCTime . fromInteger . sloppyInteger2Integer $ currentTimestamp') v6
