@@ -12,10 +12,10 @@ executable ethereum-test
                      , nibblestring
                      , either
                      , ethereum-vm
-                     , ethereum-data-sql
-                     , ethereum-merkle-patricia-db
+                     , blockapps-data
+                     , merkle-patricia-db
                      , ethereum-rlp
-                     , ethereum-util
+                     , blockapps-util
                      , haskoin
                      , IfElse
                      , time
