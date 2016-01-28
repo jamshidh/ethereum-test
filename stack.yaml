@@ -9,6 +9,8 @@ packages:
 - 'blockapps-data'
 - 'ethereum-encryption'
 - 'strato-conf'
+- 'strato-adit'
+- 'strato-quarry'
 - location:
     git: https://github.com/haskoin/haskoin
     commit: b71bcfa4701e129b69776e6951fe0bb7c8b26ea3
@@ -21,6 +23,7 @@ extra-deps:
 - nibblestring-0.0.3
 - pbkdf-1.1.1.1
 - AES-0.2.9
+- normaldistribution-1.1.0.3
 
 
 flags: {}
