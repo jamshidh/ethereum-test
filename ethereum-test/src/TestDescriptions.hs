@@ -190,9 +190,29 @@ instance FromJSON (Maybe Address) where
   parseJSON (String v) = fmap Just $ parseJSON (String v)
   parseJSON x = error $ "Wrong format when trying to parse 'Maybe Address' from JSON: " ++ show x
 
+sloppyParseHexNumber::T.Text->Integer
+sloppyParseHexNumber x =
+  case readHex x' of
+   [(val, "")] -> val
+   _ -> error $ "bad value passed to sloppyParseHexNumber: " ++ show x
+  where
+    x' = removeOptional0x $ T.unpack x
+    removeOptional0x ('0':'x':rest) = rest
+    removeOptional0x x = x                                  
+
+sloppyParseHexByteString::T.Text->B.ByteString
+sloppyParseHexByteString x =
+  case B16.decode $ BC.pack x' of
+   (val, "") -> val
+   _ -> error $ "bad value passed to sloppyParseHexNumber: " ++ show x
+  where
+    x' = removeOptional0x $ T.unpack x
+    removeOptional0x ('0':'x':rest) = rest
+    removeOptional0x x = x                                  
+         
 instance FromJSON Transaction' where
   parseJSON (Object v) =
-    Transaction' <$>
+    transaction' <$>
     v .: "data" <*>
     v .: "gasLimit" <*>
     v .: "gasPrice" <*>
@@ -200,6 +220,13 @@ instance FromJSON Transaction' where
     v .: "secretKey" <*>
     v .: "to" <*>
     v .: "value"
+    where
+      transaction' d gl gp n sk to' v =
+        let fixedTo =
+              if T.null to'
+              then Nothing
+              else Just $ Address $ fromIntegral $ sloppyParseHexNumber to'
+        in Transaction' d gl gp n sk fixedTo v
   parseJSON x = error $ "Wrong format when trying to parse Transaction' from JSON: " ++ show x
 
 instance FromJSON Env where
@@ -257,7 +284,7 @@ instance FromJSON DebugCallCreate where
     v .: "gasLimit" <*>
     v .: "value"
     where
-      debugCallCreate' v1 v2 gasLimit val = DebugCallCreate v1 v2 (read gasLimit) (read val)
+      debugCallCreate' d v2 gasLimit val = DebugCallCreate (sloppyParseHexByteString d) v2 (read gasLimit) (read val)
   parseJSON x = error $ "Wrong format when trying to parse CallCreate from JSON: " ++ show x
 
 instance FromJSON Log where
@@ -268,7 +295,7 @@ instance FromJSON Log where
     v .: "data" <*>
     v .: "topics"
     where
-      log' v1 v2 v3 v4 = Log v1 (fromIntegral $ byteString2Integer $ fst $ B16.decode v2) v3 v4
+      log' v1 v2 d v4 = Log v1 (fromIntegral $ byteString2Integer $ fst $ B16.decode v2) (sloppyParseHexByteString d) v4
   parseJSON x = error $ "Wrong format when trying to parse Log from JSON: " ++ show x
 
 b16_decode_optional0x::B.ByteString->(B.ByteString, B.ByteString)
@@ -316,9 +343,7 @@ instance FromJSON RawData where
     pure . string2RawData . T.unpack
     where
       string2RawData::String->RawData
-      string2RawData ('0':'x':rest) = RawData . fst . B16.decode . BC.pack $ rest
-      string2RawData "" = RawData B.empty
-      string2RawData x = error $ "Missing case in string2RawData: " ++ show x
+      string2RawData x = RawData . fst . b16_decode_optional0x . BC.pack $ x
 
 {- DOIT Readd
 instance FromJSON SHA where
