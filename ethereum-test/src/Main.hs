@@ -64,7 +64,8 @@ import Debug.Trace
 
 import TestFiles
 
-debugEnabled=False
+defineFlag "debugEnabled" False "enable debugging"
+defineFlag "debugEnabled2" False "enable debugging"
 
 {-
 nibbleString2ByteString::N.NibbleString->B.ByteString
@@ -205,11 +206,11 @@ runTest test = do
           blockBlockUncles = [] --error "blockUncles undefined"
           }
 
-  (result, retVal, gasRemaining, logs, returnedCallCreates) <-
+  (result, retVal, gasRemaining, logs, returnedCallCreates, maybeVMStateAfter) <-
     case theInput test of
       IExec exec -> do
 
-        let env =
+        let env' =
               Environment{
                 envGasPrice=getNumber $ gasPrice' exec,
                 envBlock=block,
@@ -223,7 +224,7 @@ runTest test = do
                 }
 
         cxt <- get
-        vmState <- liftIO $ startingState env cxt
+        vmState <- liftIO $ startingState True env' cxt
 
         (result, vmState) <- lift $
           flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
@@ -231,13 +232,15 @@ runTest test = do
             runCodeFromStart
 
             vmState <- lift get
-            when debugEnabled $ do
+            when flags_debugEnabled $ do
               liftIO $ putStrLn $ "Removing accounts in suicideList: " ++
                                 intercalate ", " (show . pretty <$> S.toList (suicideList vmState))
 
             forM_ (suicideList vmState) $ deleteAddressState
 
-        return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
+        put $ dbs vmState
+        
+        return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
 
       ITransaction transaction -> do
         let t = case tTo' transaction of
@@ -260,13 +263,12 @@ runTest test = do
                     (tSecretKey' transaction)
         signedTransaction <- liftIO $ withSource Haskoin.devURandom t
         result <-
-          runEitherT $ addTransaction block (currentGasLimit $ env test) signedTransaction
+          runEitherT $ addTransaction True block (currentGasLimit $ env test) signedTransaction
 
         case result of
           Right (vmState, _) ->
-            return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState)
-          Left e -> return (Right (), Nothing, 0, [], Just [])
-
+            return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
+          Left e -> return (Right (), Nothing, 0, [], Just [], Nothing)
 
   afterAddressStates <- addressStates
 
@@ -274,11 +276,11 @@ runTest test = do
       hashAddress (Address s) = Address $ fromIntegral $ byteString2Integer $ nibbleString2ByteString $ N.EvenNibbleString $ (SHA3.hash 256) $ BL.toStrict $ Bin.encode s
 
   let postTest = M.toList $
-                 M.mapKeys hashAddress $
+--                 M.mapKeys hashAddress $
                  flip M.map (post test) $
                  \s' -> s'{storage' = M.mapKeys hashInteger (storage' s')} 
 
-  when debugEnabled $ do
+  when flags_debugEnabled $ do
     liftIO $ putStrLn "Before-------------"
     liftIO $ putStrLn $ unlines $ showInfo <$> beforeAddressStates
     liftIO $ putStrLn "After-------------"
@@ -288,14 +290,14 @@ runTest test = do
     liftIO $ putStrLn "-------------"
 
   case (RawData (fromMaybe B.empty retVal) == out test,
-        (afterAddressStates == postTest) || (null postTest && isLeft result),
+        (M.fromList afterAddressStates == M.fromList postTest) || (null postTest && isLeft result),
         case remainingGas test of
           Nothing -> True
           Just x -> gasRemaining == x,
         logs == reverse (logs' test),
         (callcreates test == fmap reverse returnedCallCreates) || (isNothing (callcreates test) && (returnedCallCreates == Just []))
         ) of
-    (False, _, _, _, _) -> return $ Left "result doesn't match"
+    (False, _, _, _, _) -> return $ Left $ "result doesn't match" -- : is " ++ show retVal ++ ", should be " ++ show (out test)
     (_, False, _, _, _) -> return $ Left "address states don't match"
     (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show gasRemaining ++ ", should be " ++ show (remainingGas test) ++ ", diff=" ++ show (gasRemaining - fromJust (remainingGas test))
     (_, _, _, False, _) -> do
@@ -328,12 +330,10 @@ runTests tests = do
 
 main::IO ()
 main = do
-  _ <- $initHFlags "The Ethereum Test program"
+  args <- $initHFlags "The Ethereum Test program"
   testsExist <- doesDirectoryExist "tests"
   when (not testsExist) $
     error "You need to clone the git repository at https://github.com/ethereum/tests.git"
-
-  args <- getArgs
 
   let (maybeFileName, maybeTestName) = 
         case args of
