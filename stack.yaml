@@ -24,6 +24,6 @@ extra-deps:
 - pbkdf-1.1.1.1
 - AES-0.2.9
 - normaldistribution-1.1.0.3
-
+- milena-0.5.0.1
 
 flags: {}

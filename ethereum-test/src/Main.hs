@@ -43,10 +43,12 @@ import Blockchain.Data.RLP
 import Blockchain.Data.Transaction
 import qualified Blockchain.Database.MerklePatricia as MP
 import Blockchain.Database.MerklePatricia.Internal
+import Blockchain.DB.MemAddressStateDB
 import Blockchain.DB.StateDB
+import Blockchain.DB.StorageDB
 import Blockchain.DB.CodeDB
 import Blockchain.DBM
-import Blockchain.ExtDBs
+--import Blockchain.ExtDBs
 import Blockchain.ExtWord
 import Blockchain.Format
 import Blockchain.SHA
@@ -239,7 +241,10 @@ runTest test = do
             forM_ (suicideList vmState) $ deleteAddressState
 
         put $ dbs vmState
-        
+
+        flushMemStorageDB
+        flushMemAddressStateDB
+
         return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
 
       ITransaction transaction -> do
@@ -346,25 +351,10 @@ main = do
 
   homeDir <- getHomeDirectory
 
-  _ <- runResourceT $ do
-    dbs <- openDBs
-    sdb <- DB.open (homeDir </> dbDir "h" ++ stateDBPath)
-           DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-    hdb <- DB.open (homeDir </> dbDir "h" ++ hashDBPath)
-           DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-    cdb <- DB.open (homeDir </> dbDir "h" ++ codeDBPath)
-           DB.defaultOptions{DB.createIfMissing=True, DB.cacheSize=1024}
-
-
+  _ <- runContextM $ do
     let debug = length args == 2
-    runStateT (runAllTests maybeFileName maybeTestName) (Context
-                                                         MP.MPDB{MP.ldb=sdb, MP.stateRoot=error "undefined stateroor"}
-                                                         hdb
-                                                         cdb
-                                                         (sqlDB' dbs)
-                                                         Nothing
-                                                         M.empty)
-
+    runAllTests maybeFileName maybeTestName
+    
   return ()
 
 runAllTests::Maybe String->Maybe String->ContextM ()
