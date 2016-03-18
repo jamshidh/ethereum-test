@@ -191,21 +191,21 @@ runTest test = do
              blockDataNumber = read . currentNumber . env $ test,
              blockDataCoinbase = currentCoinbase . env $ test,
              blockDataDifficulty = read . currentDifficulty . env $ test,
-             blockDataUnclesHash = SHA 0, --error "unclesHash undefined",
-             blockDataStateRoot = SHAPtr "", --error "bStateRoot undefined",
-             blockDataTransactionsRoot = SHAPtr "", --error "transactionsRoot undefined",
-             blockDataReceiptsRoot = SHAPtr "", --error "receiptsRoot undefined",
-             blockDataLogBloom = "", --error "logBloom undefined",
+             blockDataUnclesHash = SHA 0, --error "unclesHash not set",
+             blockDataStateRoot = SHAPtr "", --error "bStateRoot not set",
+             blockDataTransactionsRoot = SHAPtr "", --error "transactionsRoot not set",
+             blockDataReceiptsRoot = SHAPtr "", --error "receiptsRoot not set",
+             blockDataLogBloom = "", --error "logBloom not set",
              blockDataGasLimit = currentGasLimit . env $ test,
-             blockDataGasUsed = 0, --error "gasUsed undefined",
+             blockDataGasUsed = 0, --error "gasUsed not set",
              blockDataTimestamp = currentTimestamp . env $ test,
              --timestamp = posixSecondsToUTCTime . fromInteger . read . currentTimestamp . env $ test,
-             blockDataExtraData = 0, --error "extraData undefined",
-             blockDataNonce = 0, --error "nonce undefined",
-             blockDataMixHash=SHA 0 --error "mixHash undefined"
+             blockDataExtraData = 0, --error "extraData not set",
+             blockDataNonce = 0, --error "nonce not set",
+             blockDataMixHash=SHA 0 --error "mixHash not set"
              },
-          blockReceiptTransactions = [], --error "receiptTransactions undefined",
-          blockBlockUncles = [] --error "blockUncles undefined"
+          blockReceiptTransactions = [], --error "receiptTransactions not set",
+          blockBlockUncles = [] --error "blockUncles not set"
           }
 
   (result, retVal, gasRemaining, logs, returnedCallCreates, maybeVMStateAfter) <-
