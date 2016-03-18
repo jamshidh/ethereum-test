@@ -270,6 +270,10 @@ runTest test = do
         result <-
           runEitherT $ addTransaction True block (currentGasLimit $ env test) signedTransaction
 
+        flushMemStorageDB
+        flushMemAddressStateDB
+
+
         case result of
           Right (vmState, _) ->
             return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
