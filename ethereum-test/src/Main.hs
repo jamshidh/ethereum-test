@@ -352,6 +352,7 @@ main = do
   homeDir <- getHomeDirectory
 
   _ <- runContextM $ do
+    putWSTT $ fromMaybe (error "whoSignedThisTransaction was called with an invalid signature") . whoSignedThisTransaction
     let debug = length args == 2
     runAllTests maybeFileName maybeTestName
     
