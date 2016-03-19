@@ -153,6 +153,15 @@ isBlankCode::Code->Bool
 isBlankCode (Code "") = True
 isBlankCode _ = False
 
+--Just a cheap trick to enable the display of nearly all storage keys in the tests
+someHashes::M.Map SHA Int
+someHashes = M.fromList $ map (\x -> (hash (B.pack $ word256ToBytes x), fromIntegral x)) [0..255]
+
+showHash::Integer->String
+showHash val =
+  case M.lookup (SHA (fromIntegral val)) someHashes of
+   Nothing -> showHexInt val ++ "[#ed]"
+   Just x -> show x
 
 showInfo::(Address,AddressState')->String
 showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=Code c}) = 
@@ -160,7 +169,7 @@ showInfo (key,val@AddressState'{nonce'=n, balance'=b, storage'=s, contractCode'=
          (if M.null s
           then ""
           else ", " ++ (show $ M.toList $
-               M.map showHexInt $ M.mapKeys ((++ "[#ed]") . showHexInt) s)
+               M.map showHexInt $ M.mapKeys showHash s)
          ) ++ 
          (if B.null c then "" else ", CODE:[" ++ C.blue (format c) ++ "]")
 
@@ -172,6 +181,12 @@ addressStates = do
   states' <- mapM (uncurry getDataAndRevertAddressState) $ zip addrs states
   return $ zip addrs states'
 
+showPart::Show a=>a->String
+showPart x =
+  if length value < 40
+  then value
+  else take 40 value ++ "..."
+  where value = take 40 $ show x
 
 runTest::Test->ContextM (Either String String)
 runTest test = do
@@ -245,7 +260,9 @@ runTest test = do
         flushMemStorageDB
         flushMemAddressStateDB
 
-        return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
+        case vmException vmState of
+         Nothing -> return (result, returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
+         Just e -> return (Right (), Nothing, 0, [], Just [], Nothing)
 
       ITransaction transaction -> do
         let t = case tTo' transaction of
@@ -273,11 +290,13 @@ runTest test = do
         flushMemStorageDB
         flushMemAddressStateDB
 
-
         case result of
-          Right (vmState, _) ->
-            return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
-          Left e -> return (Right (), Nothing, 0, [], Just [], Nothing)
+          Right (VMState{vmException=Just e}, _) -> do
+                    return (Right (), Nothing, 0, [], Just [], Nothing)
+          Right (vmState, _) -> do
+                    return (Right (), returnVal vmState, vmGasRemaining vmState, logs vmState, debugCallCreates vmState, Just vmState)
+          Left e -> do
+                    return (Right (), Nothing, 0, [], Just [], Nothing)
 
   afterAddressStates <- addressStates
 
@@ -306,7 +325,7 @@ runTest test = do
         logs == reverse (logs' test),
         (callcreates test == fmap reverse returnedCallCreates) || (isNothing (callcreates test) && (returnedCallCreates == Just []))
         ) of
-    (False, _, _, _, _) -> return $ Left $ "result doesn't match" -- : is " ++ show retVal ++ ", should be " ++ show (out test)
+    (False, _, _, _, _) -> return $ Left $ "result doesn't match" -- : is " ++ showPart retVal ++ ", should be " ++ showPart (out test)
     (_, False, _, _, _) -> return $ Left "address states don't match"
     (_, _, False, _, _) -> return $ Left $ "remaining gas doesn't match: is " ++ show gasRemaining ++ ", should be " ++ show (remainingGas test) ++ ", diff=" ++ show (gasRemaining - fromJust (remainingGas test))
     (_, _, _, False, _) -> do
