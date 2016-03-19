@@ -83,24 +83,6 @@ stateTests =
     "./tests/StateTests/stTransactionTest.json",
 --    "./tests/StateTests/stTransitionTest.json", --seem's corrupt, doesn't pass on haskell or go, but haskell and go agree with each other
     "./tests/StateTests/stWalletTest.json",
---    "./tests/StateTests/Homestead/stCallCodes.json",
---    "./tests/StateTests/Homestead/stCallCreateCallCodeTest.json",
---    "./tests/StateTests/Homestead/stCallDelegateCodesCallCode.json",
---    "./tests/StateTests/Homestead/stCallDelegateCodes.json",
---    "./tests/StateTests/Homestead/stDelegatecallTest.json",
---    "./tests/StateTests/Homestead/stHomeSteadSpecific.json",
---    "./tests/StateTests/Homestead/stInitCodeTest.json",
---    "./tests/StateTests/Homestead/stLogTests.json",
---    "./tests/StateTests/Homestead/stMemoryStressTest.json",
---    "./tests/StateTests/Homestead/stMemoryTest.json",
---    "./tests/StateTests/Homestead/stPreCompiledContracts.json",
---    "./tests/StateTests/Homestead/stQuadraticComplexityTest.json",
---    "./tests/StateTests/Homestead/stRecursiveCreate.json",
---    "./tests/StateTests/Homestead/stRefundTest.json",
---    "./tests/StateTests/Homestead/stSpecialTest.json",
---    "./tests/StateTests/Homestead/stSystemOperationsTest.json",
---    "./tests/StateTests/Homestead/stTransactionTest.json",
---    "./tests/StateTests/Homestead/stWalletTest.json",
     "./tests/StateTests/RandomTests/st201503121803PYTHON.json",
     "./tests/StateTests/RandomTests/st201503121806PYTHON.json",
     "./tests/StateTests/RandomTests/st201503121848GO.json",
@@ -745,10 +727,32 @@ stateTests =
     "./tests/StateTests/RandomTests/st201507030359GO.json"
   ]
 
+homesteadFiles = [
+    "./tests/StateTests/Homestead/stCallCodes.json",
+    "./tests/StateTests/Homestead/stCallCreateCallCodeTest.json",
+    "./tests/StateTests/Homestead/stCallDelegateCodesCallCode.json",
+    "./tests/StateTests/Homestead/stCallDelegateCodes.json",
+    "./tests/StateTests/Homestead/stDelegatecallTest.json",
+    "./tests/StateTests/Homestead/stHomeSteadSpecific.json",
+    "./tests/StateTests/Homestead/stInitCodeTest.json",
+    "./tests/StateTests/Homestead/stLogTests.json",
+    "./tests/StateTests/Homestead/stMemoryStressTest.json",
+    "./tests/StateTests/Homestead/stMemoryTest.json",
+    "./tests/StateTests/Homestead/stPreCompiledContracts.json",
+    "./tests/StateTests/Homestead/stQuadraticComplexityTest.json",
+    "./tests/StateTests/Homestead/stRecursiveCreate.json",
+    "./tests/StateTests/Homestead/stRefundTest.json",
+    "./tests/StateTests/Homestead/stSpecialTest.json",
+    "./tests/StateTests/Homestead/stSystemOperationsTest.json",
+    "./tests/StateTests/Homestead/stTransactionTest.json",
+    "./tests/StateTests/Homestead/stWalletTest.json"
+    ]
+
 testFiles::[String]
 testFiles =
   vmTests ++
-  stateTests
+  stateTests ++
+  homesteadFiles
 
 
 
