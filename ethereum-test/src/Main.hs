@@ -241,7 +241,7 @@ runTest test = do
                 }
 
         cxt <- get
-        vmState <- liftIO $ startingState True env' cxt
+        vmState <- liftIO $ startingState True False env' cxt
 
         (result, vmState) <- lift $
           flip runStateT vmState{vmGasRemaining=getNumber $ gas exec, debugCallCreates=Just []} $
